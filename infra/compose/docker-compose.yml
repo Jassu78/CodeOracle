@@ -1,0 +1,81 @@
+# CodeOracle — core self-hosted stack (Postgres + Redis + Qdrant only).
+# apps/api, apps/worker, apps/mcp-server, and Ollama are added in later
+# compose files once their business logic exists.
+#
+# Target: runs on a 12GB Ampere OCI Always Free instance AND on a developer
+# laptop. RAM budget comments below are rough sizing notes —
+# verify on your own hardware before treating these as guarantees.
+#
+# Port conflict note (found while verifying this scaffold): if you already
+# run a native Postgres/Redis/Qdrant on the default ports, the Docker
+# container's port-forward can silently lose to the native service on some
+# hosts, and clients will connect to the WRONG database with no obvious
+# error (you'll see e.g. "role does not exist" instead of a connection
+# error). Override via env vars before `docker compose up` if that happens:
+#   POSTGRES_HOST_PORT=5433 REDIS_HOST_PORT=6380 docker compose up -d
+# and update DATABASE_URL/REDIS_URL in your .env to match.
+
+name: codeoracle
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: codeoracle-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-codeoracle}
+      POSTGRES_USER: ${POSTGRES_USER:-codeoracle}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-dev}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # RAM budget: ~256-512MB idle for a single-repo MVP workload.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codeoracle} -d ${POSTGRES_DB:-codeoracle}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: codeoracle-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    # RAM budget: ~50-100MB for BullMQ queue traffic at MVP scale.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: codeoracle-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_HOST_PORT:-6333}:6333" # REST
+      - "${QDRANT_GRPC_HOST_PORT:-6334}:6334" # gRPC
+    volumes:
+      - qdrantdata:/qdrant/storage
+    # RAM budget: ~200-400MB for a small single-repo collection.
+    # Qdrant's official image has neither wget nor curl, so the healthcheck
+    # uses /dev/tcp (bash builtin) to confirm the REST port is accepting
+    # connections — verified against a real container before pinning this.
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
+  qdrantdata:
+
+# Total estimated idle RAM for this slice: ~0.5-1GB. Full-stack estimate
+# including api/worker/Ollama is ~2-3.5GB. Do not run a 7B+ local chat model
+# alongside this stack on a 12GB box; keep it opt-in via providers.yaml.

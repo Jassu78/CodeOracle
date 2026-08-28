@@ -1,0 +1,29 @@
+{
+  "name": "@codeoracle/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CodeOracle TUI bootstrap + ops CLI. `codeoracle doctor` (this stage) checks the local environment; `init`/`status`/`mcp-config` land in later stages.",
+  "type": "module",
+  "bin": {
+    "codeoracle": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsup src/main.ts --format esm --dts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@codeoracle/config": "workspace:*",
+    "@clack/prompts": "^0.9.1",
+    "commander": "^13.0.0",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

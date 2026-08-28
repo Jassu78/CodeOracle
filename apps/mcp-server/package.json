@@ -1,0 +1,20 @@
+{
+  "name": "@codeoracle/mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MCP transport (stdio now, HTTP+SSE later) — thin adapter over core. STUB — see README.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@codeoracle/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

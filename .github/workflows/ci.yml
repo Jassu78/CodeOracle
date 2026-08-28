@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-typecheck-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests (all packages, including empty stubs)
+        run: pnpm test
+
+  compose-smoke-test:
+    runs-on: ubuntu-latest
+    # Prove Postgres/Redis/Qdrant come up healthy. Full compose-up +
+    # golden-query eval gate is added once apps/api, worker, and mcp-server exist.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: docker compose up
+        working-directory: infra/compose
+        run: docker compose up -d
+
+      - name: Wait for services to be healthy
+        working-directory: infra/compose
+        run: |
+          for i in $(seq 1 30); do
+            unhealthy=$(docker compose ps --format json | grep -c '"Health":"healthy"' || true)
+            total=$(docker compose ps --format json | wc -l)
+            echo "Healthy: $unhealthy / $total"
+            if [ "$unhealthy" -ge 3 ]; then
+              echo "All services healthy."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Services did not become healthy in time."
+          docker compose logs
+          exit 1
+
+      - name: Tear down
+        if: always()
+        working-directory: infra/compose
+        run: docker compose down -v

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.turbo/
+coverage/
+*.log
+.env
+.env.local
+.DS_Store
+.vscode/
+!.vscode/extensions.json
+.qdrant_storage/
+.pgdata/
+*.tsbuildinfo

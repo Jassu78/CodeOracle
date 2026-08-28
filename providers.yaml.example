@@ -1,0 +1,47 @@
+# CodeOracle universal OpenAI-compatible provider config.
+# Copy to providers.yaml. Adding a provider is a config change here — never a code change.
+# Every entry speaks /v1/chat/completions or /v1/embeddings.
+
+chat:
+  # Priority order: lower number tried first. On 429/5xx/network error, next enabled
+  # endpoint by priority is tried. Non-retryable 4xx (bad key/model) is skipped, not retried.
+  - id: ollama-local
+    kind: chat
+    baseUrl: http://localhost:11434/v1
+    apiKeyEnv: null
+    model: qwen2.5-coder:7b
+    priority: 100
+    enabled: true
+
+  - id: gemini-free
+    kind: chat
+    baseUrl: https://generativelanguage.googleapis.com/v1beta/openai
+    apiKeyEnv: GEMINI_API_KEY
+    model: gemini-2.0-flash
+    priority: 1
+    enabled: false # enable once GEMINI_API_KEY is set
+
+  - id: groq-free
+    kind: chat
+    baseUrl: https://api.groq.com/openai/v1
+    apiKeyEnv: GROQ_API_KEY
+    model: llama-3.3-70b-versatile
+    priority: 2
+    enabled: false # enable once GROQ_API_KEY is set
+
+  - id: openrouter-free
+    kind: chat
+    baseUrl: https://openrouter.ai/api/v1
+    apiKeyEnv: OPENROUTER_API_KEY
+    model: meta-llama/llama-3.1-8b-instruct:free
+    priority: 3
+    enabled: false # enable once OPENROUTER_API_KEY is set
+
+embeddings:
+  - id: ollama-embed-local
+    kind: embeddings
+    baseUrl: http://localhost:11434/v1
+    apiKeyEnv: null
+    model: nomic-embed-text
+    priority: 1
+    enabled: true

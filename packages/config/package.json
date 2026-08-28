@@ -1,0 +1,34 @@
+{
+  "name": "@codeoracle/config",
+  "version": "0.0.0",
+  "private": true,
+  "description": "zod-validated env + providers.yaml loader. Fails loudly on invalid config — never silently defaults a missing secret.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@codeoracle/contracts": "workspace:*",
+    "zod": "^3.24.1",
+    "yaml": "^2.7.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
