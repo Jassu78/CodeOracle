@@ -5,13 +5,15 @@ import {
   persistOneDecision,
   type Database,
 } from "@codeoracle/db";
-import type { QdrantClient } from "@qdrant/js-client-rest";
 import {
+  createQdrantClient,
   decisionEmbedText,
   ensureDecisionsCollection,
   searchSimilarDecisions,
   upsertDecisionVectors,
 } from "@codeoracle/retrieval";
+
+type QdrantClient = ReturnType<typeof createQdrantClient>;
 
 /** Drop extractions below this without failing the job (PRD Stage 3 gate). */
 export const MIN_EXTRACTION_CONFIDENCE = 0.5;
