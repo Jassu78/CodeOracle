@@ -27,6 +27,21 @@ export async function runChunkFile(opts: {
 
   try {
     const source = await readRepoFile(opts.payload.repoRoot, opts.payload.filePath);
+
+    // Binary / non-text files (null bytes) must not be inserted into Postgres text columns.
+    if (source.includes("\0")) {
+      await finishJobHistory(opts.db, jobHistoryId, { status: "done", latencyMs: Date.now() - started });
+      await markFileComplete(opts.redis, opts.payload.repoId);
+      await finalizeIndexIfComplete({
+        env: opts.env,
+        redis: opts.redis,
+        db: opts.db,
+        repoId: opts.payload.repoId,
+        queue: opts.queue,
+      });
+      return { chunkCount: 0 };
+    }
+
     const chunkIds: string[] = [];
     const rows = [];
 
@@ -80,6 +95,7 @@ export async function runChunkFile(opts: {
         redis: opts.redis,
         db: opts.db,
         repoId: opts.payload.repoId,
+        queue: opts.queue,
       });
     }
 

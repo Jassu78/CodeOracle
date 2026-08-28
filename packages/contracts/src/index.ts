@@ -4,3 +4,4 @@ export * from "./repo.js";
 export * from "./jobs.js";
 export * from "./mcp.js";
 export * from "./providers.js";
+export * from "./provider-usage.js";

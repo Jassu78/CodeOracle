@@ -40,6 +40,10 @@ export async function upsertChunkVectors(
 
 /** Removes all Qdrant points for a repo — used before idempotent full re-index. */
 export async function deleteRepoChunkVectors(client: QdrantClient, repoId: string): Promise<void> {
+  const collections = await client.getCollections();
+  const exists = collections.collections.some((c) => c.name === CHUNKS_COLLECTION);
+  if (!exists) return;
+
   await client.delete(CHUNKS_COLLECTION, {
     wait: true,
     filter: {

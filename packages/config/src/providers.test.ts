@@ -52,7 +52,7 @@ chat:
     kind: chat
     baseUrl: https://generativelanguage.googleapis.com/v1beta/openai
     apiKeyEnv: GEMINI_API_KEY
-    model: gemini-2.0-flash
+    model: gemini-2.5-flash
     priority: 1
     enabled: true
 embeddings: []
@@ -67,7 +67,7 @@ chat:
     kind: chat
     baseUrl: https://generativelanguage.googleapis.com/v1beta/openai
     apiKeyEnv: GEMINI_API_KEY
-    model: gemini-2.0-flash
+    model: gemini-2.5-flash
     priority: 1
     enabled: false
 embeddings: []

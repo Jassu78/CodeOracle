@@ -22,6 +22,7 @@
     "db:migrate": "pnpm --filter @codeoracle/db run migrate",
     "chunk": "pnpm --filter @codeoracle/chunker run chunk",
     "cli": "pnpm --filter @codeoracle/cli run start",
+    "decisions:review": "pnpm --filter @codeoracle/cli run start -- decisions review",
     "worker": "pnpm --filter @codeoracle/worker run start",
     "api": "pnpm --filter @codeoracle/api run start"
   },

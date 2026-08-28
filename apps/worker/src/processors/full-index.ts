@@ -5,20 +5,23 @@ import type { ProvidersConfig } from "@codeoracle/contracts";
 import { JOB_NAMES } from "@codeoracle/contracts";
 import {
   clearRepoChunks,
+  clearRepoDecisions,
   finishJobHistory,
   repos,
   startJobHistory,
   type Database,
 } from "@codeoracle/db";
 import { ProviderRegistry } from "@codeoracle/gateway";
+import { logProviderUsage } from "@codeoracle/observability";
 import { bullJobId } from "@codeoracle/queue";
 import type { Queue } from "bullmq";
 import type IORedis from "ioredis";
-import { createQdrantClient, deleteRepoChunkVectors } from "@codeoracle/retrieval";
+import { createQdrantClient, deleteRepoChunkVectors, deleteRepoDecisionVectors } from "@codeoracle/retrieval";
 import { cloneGithubRepo, ensureCloneDir } from "../crawler/github-clone.js";
 import { crawlGithubHistory, crawlLocalGitHistory } from "../crawler/github-history.js";
 import { listSourceFiles, resolveRepoHeadSha } from "../crawler/walk-files.js";
 import { beginIndexRun, clearIndexRun, getIndexRunStats, getPendingFileCount } from "../lib/index-progress.js";
+import { queueExtractDecisionsForRepo } from "../lib/queue-extraction-jobs.js";
 
 export async function runFullIndexSetup(opts: {
   env: Env;
@@ -30,7 +33,11 @@ export async function runFullIndexSetup(opts: {
 }): Promise<{ filesQueued: number; headSha: string }> {
   const db = opts.db;
   const qdrant = createQdrantClient(opts.env.QDRANT_URL);
-  const gateway = new ProviderRegistry(opts.providers, process.env);
+  const gateway = new ProviderRegistry({
+    config: opts.providers,
+    env: process.env,
+    onUsage: logProviderUsage,
+  });
   const started = Date.now();
   const jobHistoryId = await startJobHistory(db, {
     repoId: opts.repoId,
@@ -48,7 +55,9 @@ export async function runFullIndexSetup(opts: {
     await db.update(repos).set({ embeddingModelId }).where(eq(repos.id, opts.repoId));
 
     await clearRepoChunks(db, opts.repoId);
+    await clearRepoDecisions(db, opts.repoId);
     await deleteRepoChunkVectors(qdrant, opts.repoId);
+    await deleteRepoDecisionVectors(qdrant, opts.repoId);
     await clearIndexRun(opts.redis, opts.repoId);
 
     const isLocal = Boolean(repo.localClonePath);
@@ -64,11 +73,17 @@ export async function runFullIndexSetup(opts: {
         githubFullName: repo.githubFullName,
         branch: repo.defaultBranch,
         pat: opts.env.GITHUB_PAT,
+        historyDepth: opts.env.CLONE_HISTORY_DEPTH,
       });
     }
 
     if (isLocal) {
-      await crawlLocalGitHistory({ db, repoId: opts.repoId, repoRoot });
+      await crawlLocalGitHistory({
+        db,
+        repoId: opts.repoId,
+        repoRoot,
+        repoSlug: repo.githubFullName,
+      });
     } else {
       await crawlGithubHistory({
         db,
@@ -84,10 +99,13 @@ export async function runFullIndexSetup(opts: {
     await beginIndexRun(opts.redis, opts.repoId, files.length);
 
     if (files.length === 0) {
-      await db
-        .update(repos)
-        .set({ indexStatus: "ready", lastFullIndexAt: new Date() })
-        .where(eq(repos.id, opts.repoId));
+      await finalizeIndexIfComplete({
+        env: opts.env,
+        redis: opts.redis,
+        db: opts.db,
+        repoId: opts.repoId,
+        queue: opts.queue,
+      });
       await finishJobHistory(db, jobHistoryId, { status: "done", latencyMs: Date.now() - started });
       return { filesQueued: 0, headSha };
     }
@@ -128,6 +146,7 @@ export async function finalizeIndexIfComplete(opts: {
   redis: IORedis;
   db: Database;
   repoId: string;
+  queue?: Queue;
 }): Promise<boolean> {
   const remaining = await getPendingFileCount(opts.redis, opts.repoId);
   if (remaining > 0) return false;
@@ -155,6 +174,25 @@ export async function finalizeIndexIfComplete(opts: {
     .set({ indexStatus: "ready", lastFullIndexAt: new Date() })
     .where(eq(repos.id, opts.repoId));
   await clearIndexRun(opts.redis, opts.repoId);
+
+  if (opts.queue) {
+    const { queued: extractQueued, skippedTrivial, skippedCommitCoveredByPr } =
+      await queueExtractDecisionsForRepo({
+        db: opts.db,
+        queue: opts.queue,
+        repoId: opts.repoId,
+      });
+    if (extractQueued > 0 || skippedTrivial > 0 || skippedCommitCoveredByPr > 0) {
+      console.info(
+        `Queued ${extractQueued} extract_decisions jobs repo=${opts.repoId}` +
+          (skippedTrivial > 0 ? ` (skipped ${skippedTrivial} trivial)` : "") +
+          (skippedCommitCoveredByPr > 0
+            ? ` (skipped ${skippedCommitCoveredByPr} commits covered by PR)`
+            : ""),
+      );
+    }
+  }
+
   return true;
 }
 

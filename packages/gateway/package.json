@@ -11,7 +11,7 @@
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
     "@codeoracle/contracts": "workspace:*",

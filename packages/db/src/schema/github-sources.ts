@@ -1,5 +1,13 @@
 import { sql } from "drizzle-orm";
-import { pgTable, uuid, text, timestamp, index, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  index,
+  jsonb,
+  unique,
+} from "drizzle-orm/pg-core";
 import { repos } from "./repos";
 
 /** Raw PR/commit payloads fetched during indexing — input for Stage 3 extraction. */
@@ -22,6 +30,12 @@ export const githubSources = pgTable(
   },
   (table) => ({
     repoTypeIdx: index("github_sources_repo_type_idx").on(table.repoId, table.sourceType),
-    repoShaUnique: uniqueIndex("github_sources_repo_sha_unique").on(table.repoId, table.sourceSha),
+    /** Non-unique — a PR merge SHA and the commit row may share the same sha. */
+    repoShaIdx: index("github_sources_repo_sha_idx").on(table.repoId, table.sourceSha),
+    repoTypeExternalUnique: unique("github_sources_repo_type_external_unique").on(
+      table.repoId,
+      table.sourceType,
+      table.externalId,
+    ),
   }),
 );

@@ -1,5 +1,14 @@
 # @codeoracle/extraction
 
-**Status:** Stub.
+Decision extraction pipeline (Stage 3): PR/commit → redacted prompt → gateway chat → structured `Decision` JSON.
 
-Decision extraction pipeline (PR/commit → structured `Decision` via LLM, `superseded_by` dedup, versioned prompts) is not built yet. Requires `@codeoracle/gateway` with a working failover chain first.
+## Modules
+
+| File | Responsibility |
+|------|----------------|
+| `redact-secrets.ts` | FR-13 scrubber before LLM calls |
+| `prompt.ts` | System + user prompt templates |
+| `parse-extraction.ts` | JSON parse + `DecisionExtractionBatchSchema` validation |
+| `extract-from-source.ts` | Orchestrates one source extraction (no persistence) |
+
+Persistence and BullMQ jobs live in `apps/worker` (D3.3).

@@ -17,6 +17,7 @@ export async function handleIndexJobFailure(opts: {
   env: Env;
   redis: IORedis;
   db: Database;
+  queue: import("bullmq").Queue;
   job: Job | undefined;
   err: Error;
 }): Promise<void> {
@@ -45,5 +46,6 @@ export async function handleIndexJobFailure(opts: {
     redis: opts.redis,
     db: opts.db,
     repoId,
+    queue: opts.queue,
   });
 }

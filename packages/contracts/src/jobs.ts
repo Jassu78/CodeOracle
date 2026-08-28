@@ -46,8 +46,8 @@ export type EmbedChunksJobPayload = z.infer<typeof EmbedChunksJobPayloadSchema>;
 
 export const ExtractDecisionsJobPayloadSchema = z.object({
   repoId: z.string().uuid(),
-  prNumber: z.number().int().positive().nullable(),
-  sha: z.string(),
+  /** One BullMQ job per row in `github_sources`. */
+  githubSourceId: z.string().uuid(),
 });
 export type ExtractDecisionsJobPayload = z.infer<typeof ExtractDecisionsJobPayloadSchema>;
 
