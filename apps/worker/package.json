@@ -30,6 +30,7 @@
     "ioredis": "^5.4.2"
   },
   "devDependencies": {
+    "ioredis-mock": "^8.13.1",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
