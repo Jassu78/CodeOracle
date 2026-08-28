@@ -35,6 +35,11 @@ export const EnvSchema = z.object({
   EXTRACT_CONCURRENCY: z.coerce.number().int().positive().default(2),
   /** Drop LLM decisions below this confidence (0-1). Default 0.5. */
   EXTRACT_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.5),
+  /**
+   * Cap extract jobs queued after a full index (and default for CLI if unset).
+   * 0 = no cap (queue all eligible sources). Use a small number for dogfood.
+   */
+  EXTRACT_QUEUE_LIMIT: z.coerce.number().int().nonnegative().default(0),
   /** How many commits to keep in each GitHub clone for deterministic path lookup. */
   CLONE_HISTORY_DEPTH: z.coerce.number().int().positive().default(200),
   CLONE_MAX_REPOS: z.coerce.number().int().positive().default(50),

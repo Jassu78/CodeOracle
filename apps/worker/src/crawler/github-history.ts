@@ -102,6 +102,34 @@ async function listCommitTouchedPathsViaApi(
   return normalizePathList(paths).slice(0, MAX_TOUCHED_PATHS);
 }
 
+async function listPrCommitShas(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+): Promise<string[]> {
+  const shas: string[] = [];
+  let page = 1;
+  while (shas.length < 250 && page <= 5) {
+    const { data } = await withRateLimitRetry(() =>
+      octokit.rest.pulls.listCommits({
+        owner,
+        repo,
+        pull_number: pullNumber,
+        per_page: 100,
+        page,
+      }),
+    );
+    if (data.length === 0) break;
+    for (const c of data) {
+      if (c.sha) shas.push(c.sha);
+    }
+    if (data.length < 100) break;
+    page += 1;
+  }
+  return shas;
+}
+
 export async function crawlGithubHistory(opts: {
   db: Database;
   repoId: string;
@@ -112,7 +140,7 @@ export async function crawlGithubHistory(opts: {
   if (!owner || !repo) throw new Error(`Invalid github full name: ${opts.githubFullName}`);
   const octokit = new Octokit({ auth: opts.pat });
 
-  const prMergeShas = new Set<string>();
+  const prCoveredShas = new Set<string>();
   let prCount = 0;
   let prPage = 1;
   while (prPage <= 5) {
@@ -137,6 +165,14 @@ export async function crawlGithubHistory(opts: {
         touchedPaths = [];
       }
 
+      let prCommitShas: string[] = [];
+      try {
+        prCommitShas = await listPrCommitShas(octokit, owner, repo, pr.number);
+      } catch {
+        prCommitShas = [];
+      }
+      if (mergeSha) prCommitShas = [...new Set([...prCommitShas, mergeSha])];
+
       await upsertGithubSource(opts.db, {
         repoId: opts.repoId,
         sourceType: "pr",
@@ -146,9 +182,9 @@ export async function crawlGithubHistory(opts: {
         sourceUrl: pr.html_url ?? null,
         sourceSha: mergeSha,
         mergedAt: new Date(pr.merged_at),
-        rawJson: { ...(pr as unknown as Record<string, unknown>), touchedPaths },
+        rawJson: { ...(pr as unknown as Record<string, unknown>), touchedPaths, prCommitShas },
       });
-      if (mergeSha) prMergeShas.add(mergeSha);
+      for (const sha of prCommitShas) prCoveredShas.add(sha);
       prCount += 1;
     }
     prPage += 1;
@@ -169,7 +205,7 @@ export async function crawlGithubHistory(opts: {
 
     for (const commit of commits) {
       // Skip commits already covered by a merged PR (prefer PR bodies for extract).
-      if (prMergeShas.has(commit.sha)) continue;
+      if (prCoveredShas.has(commit.sha)) continue;
 
       let touchedPaths: string[] = [];
       try {
@@ -198,6 +234,26 @@ export async function crawlGithubHistory(opts: {
   return { prCount, commitCount };
 }
 
+/** Parse `git log --format=%H%x00%s%x00%b%x00%aI%x00` stdout into records. */
+export function parseNulDelimitedGitLog(stdout: string): Array<{
+  sha: string;
+  subject: string;
+  body: string;
+  authorDate: string;
+}> {
+  const parts = stdout.split("\0");
+  const commits: Array<{ sha: string; subject: string; body: string; authorDate: string }> = [];
+  for (let i = 0; i + 3 < parts.length; i += 4) {
+    const sha = parts[i]?.trim() ?? "";
+    const subject = parts[i + 1] ?? "";
+    const body = parts[i + 2] ?? "";
+    const authorDate = parts[i + 3]?.trim() ?? "";
+    if (!/^[0-9a-f]{7,40}$/i.test(sha)) continue;
+    commits.push({ sha, subject, body, authorDate });
+  }
+  return commits;
+}
+
 export async function crawlLocalGitHistory(opts: {
   db: Database;
   repoId: string;
@@ -221,15 +277,8 @@ export async function crawlLocalGitHistory(opts: {
     opts.repoSlug ??
     (githubHttpsBase?.split("/").slice(-2).join("/") ?? opts.repoRoot.split("/").pop() ?? "local-repo");
 
-  const parts = stdout.split("\0");
   let commitCount = 0;
-  for (let i = 0; i + 3 < parts.length; i += 4) {
-    const sha = parts[i]?.trim() ?? "";
-    const subject = parts[i + 1] ?? "";
-    const body = parts[i + 2] ?? "";
-    const authorDate = parts[i + 3]?.trim() ?? "";
-    if (!/^[0-9a-f]{7,40}$/i.test(sha)) continue;
-
+  for (const { sha, subject, body, authorDate } of parseNulDelimitedGitLog(stdout)) {
     const touchedPaths = (await listCommitTouchedPaths(opts.repoRoot, sha)).slice(
       0,
       MAX_TOUCHED_PATHS,

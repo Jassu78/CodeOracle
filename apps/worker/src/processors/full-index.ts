@@ -176,15 +176,18 @@ export async function finalizeIndexIfComplete(opts: {
   await clearIndexRun(opts.redis, opts.repoId);
 
   if (opts.queue) {
+    const limit = opts.env.EXTRACT_QUEUE_LIMIT;
     const { queued: extractQueued, skippedTrivial, skippedCommitCoveredByPr } =
       await queueExtractDecisionsForRepo({
         db: opts.db,
         queue: opts.queue,
         repoId: opts.repoId,
+        limit: limit > 0 ? limit : undefined,
       });
     if (extractQueued > 0 || skippedTrivial > 0 || skippedCommitCoveredByPr > 0) {
       console.info(
         `Queued ${extractQueued} extract_decisions jobs repo=${opts.repoId}` +
+          (limit > 0 ? ` (limit=${limit})` : "") +
           (skippedTrivial > 0 ? ` (skipped ${skippedTrivial} trivial)` : "") +
           (skippedCommitCoveredByPr > 0
             ? ` (skipped ${skippedCommitCoveredByPr} commits covered by PR)`

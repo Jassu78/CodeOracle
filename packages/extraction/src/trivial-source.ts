@@ -6,7 +6,8 @@ const TRIVIAL_SUBJECT =
   /^(chore|ci|build|docs?|style|test|tests|refactor\(fmt\)|fmt)(\(.+\))?:\s/i;
 
 const TRIVIAL_PATTERNS: RegExp[] = [
-  /^(bump|update|upgrade)\s+[\w@/.-]+\s*(to\s+v?\d|\(|$)/i,
+  /^(bump|update|upgrade)\s+[\w@/.-]+\s*(from\s|to\s+v?\d|\(|$)/i,
+  /^bump\s+.+\s+from\s+\S+\s+to\s+/i,
   /^bump\s+(version|deps?|dependencies)\b/i,
   /^(fix|chore):\s*(typo|spelling|whitespace|formatting|lint)\b/i,
   /^(style|format|fmt):\s/i,
@@ -17,10 +18,19 @@ const TRIVIAL_PATTERNS: RegExp[] = [
   // Lockfile / package-lock only bumps (no rationale).
   /^(chore|build|deps?)(\(.+\))?:\s.*(package-lock|pnpm-lock|yarn\.lock|Cargo\.lock|poetry\.lock)/i,
   /^update\s+(package-lock|pnpm-lock|yarn\.lock)\b/i,
+  // Dependabot / Renovate / version-only releases.
+  /^chore\(deps\):\s/i,
+  /^(deps?|dependencies):\s*(bump|update|upgrade)\b/i,
+  /\b(dependabot|renovate)\b/i,
+  /^release:\s*v?\d+\.\d+/i,
+  /^v?\d+\.\d+\.\d+(\s|$)/i,
+  /^(npm|pnpm|yarn)\s+(audit\s+fix|lockfile)\b/i,
+  /^apply\s+(prettier|eslint|black|rustfmt)\b/i,
+  /^(auto[- ]?)?(format|lint)(\s+fix)?$/i,
 ];
 
 const RATIONALE_ESCAPE =
-  /\b(because|instead of|rather than|trade-?off|migrat|replac|switch(ed|ing)? to)\b/i;
+  /\b(because|instead of|rather than|trade-?off|migrat|replac|switch(ed|ing)? to|so that|in order to)\b/i;
 
 export function isTrivialSourceMessage(title: string, body = ""): boolean {
   const subject = title.trim().split("\n")[0] ?? "";
