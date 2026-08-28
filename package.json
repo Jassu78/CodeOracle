@@ -15,6 +15,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:integration": "INTEGRATION_TEST=1 vitest run --config test/e2e/vitest.config.ts",
     "dev": "turbo run dev",
     "clean": "turbo run clean && rm -rf node_modules",
     "db:generate": "pnpm --filter @codeoracle/db run generate",
@@ -25,6 +26,10 @@
     "api": "pnpm --filter @codeoracle/api run start"
   },
   "devDependencies": {
+    "@codeoracle/config": "workspace:*",
+    "@codeoracle/contracts": "workspace:*",
+    "@codeoracle/db": "workspace:*",
+    "@codeoracle/worker": "workspace:*",
     "turbo": "^2.3.3",
     "typescript": "^5.7.2",
     "@types/node": "^22.10.5",

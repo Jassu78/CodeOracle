@@ -15,6 +15,7 @@ import {
   registerLocalRepo,
 } from "@codeoracle/db";
 import { createQueue, createRedisConnection, bullJobId } from "@codeoracle/queue";
+import { recoverStaleIndexRun } from "@codeoracle/worker";
 
 const projectRoot = resolve(fileURLToPath(new URL("../../../..", import.meta.url)));
 
@@ -26,7 +27,7 @@ export async function runRepoRegister(opts: {
 }): Promise<void> {
   loadProjectEnv(projectRoot);
   const env = loadEnv();
-  const db = createDb(env.DATABASE_URL);
+  const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
 
   if (opts.localPath) {
     const name = opts.name ?? opts.localPath.split("/").pop() ?? "repo";
@@ -55,7 +56,7 @@ export async function runRepoRegister(opts: {
 export async function runRepoIndex(repoId: string): Promise<void> {
   loadProjectEnv(projectRoot);
   const env = loadEnv();
-  const db = createDb(env.DATABASE_URL);
+  const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
   const connection = createRedisConnection(env.REDIS_URL);
   const queue = createQueue(connection);
 
@@ -89,10 +90,30 @@ export async function runRepoIndex(repoId: string): Promise<void> {
   await connection.quit();
 }
 
+export async function runRepoRecover(repoId: string): Promise<void> {
+  loadProjectEnv(projectRoot);
+  const env = loadEnv();
+  const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
+  const connection = createRedisConnection(env.REDIS_URL);
+  const queue = createQueue(connection);
+
+  const result = await recoverStaleIndexRun({
+    env,
+    redis: connection,
+    db,
+    queue,
+    repoId,
+  });
+
+  p.log.info(`Recover ${repoId}: ${result.action} — ${result.detail}`);
+  await queue.close();
+  await connection.quit();
+}
+
 export async function runRepoStatus(repoId: string): Promise<void> {
   loadProjectEnv(projectRoot);
   const env = loadEnv();
-  const db = createDb(env.DATABASE_URL);
+  const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
   const row = await getRepoById(db, repoId);
   if (!row) {
     p.log.error(`Unknown repo id ${repoId}`);

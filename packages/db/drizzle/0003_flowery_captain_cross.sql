@@ -1,0 +1,1 @@
+ALTER TABLE "chunks" ADD COLUMN "embedding_status" text DEFAULT 'pending' NOT NULL;

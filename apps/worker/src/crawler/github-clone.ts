@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir, stat, rm } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
@@ -6,8 +6,44 @@ import { access } from "node:fs/promises";
 
 const execFileAsync = promisify(execFile);
 
-export async function ensureCloneDir(cloneRoot: string): Promise<void> {
+export async function ensureCloneDir(cloneRoot: string, maxRepos = 50): Promise<void> {
   await mkdir(cloneRoot, { recursive: true });
+  await pruneStaleClones(cloneRoot, maxRepos);
+}
+
+/** G2.17 — evict oldest clone dirs when over capacity. */
+export async function pruneStaleClones(cloneRoot: string, maxRepos: number): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await readdir(cloneRoot);
+  } catch {
+    return;
+  }
+
+  const dirs = await Promise.all(
+    entries.map(async (name) => {
+      const path = join(cloneRoot, name);
+      try {
+        const s = await stat(path);
+        if (!s.isDirectory()) return null;
+        return { path, mtimeMs: s.mtimeMs };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const sorted = dirs.filter(Boolean).sort((a, b) => a!.mtimeMs - b!.mtimeMs) as {
+    path: string;
+    mtimeMs: number;
+  }[];
+
+  const excess = sorted.length - maxRepos;
+  if (excess <= 0) return;
+
+  for (const dir of sorted.slice(0, excess)) {
+    await rm(dir.path, { recursive: true, force: true });
+  }
 }
 
 export async function cloneGithubRepo(opts: {

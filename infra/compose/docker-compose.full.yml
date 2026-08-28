@@ -1,0 +1,68 @@
+# Optional full stack — worker + API alongside the core data services.
+# Run: docker compose -f docker-compose.yml -f docker-compose.full.yml --profile full up -d
+#
+# IMPORTANT: Only one worker replica per REDIS_URL (leader lock enforced in code).
+# These services mount the repo and run via pnpm — intended for local/dev parity,
+# not production images (Dockerfiles land in Stage 5+).
+
+services:
+  worker:
+    profiles: ["full"]
+    image: node:22-bookworm-slim
+    container_name: codeoracle-worker
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ../..:/app
+      - clone_data:/app/data/clones
+    env_file:
+      - ../../.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-codeoracle}:${POSTGRES_PASSWORD:-change-me-in-dev}@postgres:5432/${POSTGRES_DB:-codeoracle}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+    command: >
+      sh -c "corepack enable && corepack prepare pnpm@9.15.0 --activate &&
+      pnpm install --frozen-lockfile &&
+      pnpm worker"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+
+  api:
+    profiles: ["full"]
+    image: node:22-bookworm-slim
+    container_name: codeoracle-api
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ../..:/app
+    env_file:
+      - ../../.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-codeoracle}:${POSTGRES_PASSWORD:-change-me-in-dev}@postgres:5432/${POSTGRES_DB:-codeoracle}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+      API_PORT: "3000"
+    ports:
+      - "${API_HOST_PORT:-3000}:3000"
+    command: >
+      sh -c "corepack enable && corepack prepare pnpm@9.15.0 --activate &&
+      pnpm install --frozen-lockfile &&
+      pnpm api"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+volumes:
+  clone_data:

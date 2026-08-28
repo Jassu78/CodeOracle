@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { runDoctor } from "./commands/doctor.js";
-import { runRepoIndex, runRepoRegister, runRepoStatus } from "./commands/repo.js";
+import { runRepoIndex, runRepoRecover, runRepoRegister, runRepoStatus } from "./commands/repo.js";
 
 const program = new Command();
 
@@ -54,6 +54,14 @@ repo
   .argument("<repoId>", "Repo UUID from `repo register`")
   .action(async (repoId: string) => {
     await runRepoIndex(repoId);
+  });
+
+repo
+  .command("recover")
+  .description("Recover a repo stuck in indexing (reconcile Redis counter vs queue).")
+  .argument("<repoId>", "Repo UUID from `repo register`")
+  .action(async (repoId: string) => {
+    await runRepoRecover(repoId);
   });
 
 repo

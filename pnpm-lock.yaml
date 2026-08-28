@@ -8,6 +8,18 @@ importers:
 
   .:
     devDependencies:
+      '@codeoracle/config':
+        specifier: workspace:*
+        version: link:packages/config
+      '@codeoracle/contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
+      '@codeoracle/db':
+        specifier: workspace:*
+        version: link:packages/db
+      '@codeoracle/worker':
+        specifier: workspace:*
+        version: link:apps/worker
       '@eslint/js':
         specifier: ^9.17.0
         version: 9.39.5
@@ -47,9 +59,18 @@ importers:
       '@codeoracle/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@codeoracle/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@codeoracle/queue':
         specifier: workspace:*
         version: link:../../packages/queue
+      drizzle-orm:
+        specifier: ^0.38.3
+        version: 0.38.4(postgres@3.4.9)
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       tsup:
         specifier: ^8.3.5
@@ -81,6 +102,9 @@ importers:
       '@codeoracle/queue':
         specifier: workspace:*
         version: link:../../packages/queue
+      '@codeoracle/worker':
+        specifier: workspace:*
+        version: link:../worker
       commander:
         specifier: ^13.0.0
         version: 13.1.0
@@ -134,6 +158,9 @@ importers:
       '@codeoracle/gateway':
         specifier: workspace:*
         version: link:../../packages/gateway
+      '@codeoracle/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@codeoracle/queue':
         specifier: workspace:*
         version: link:../../packages/queue

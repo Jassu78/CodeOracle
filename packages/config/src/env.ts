@@ -26,6 +26,17 @@ export const EnvSchema = z.object({
   MCP_HTTP_BEARER_TOKEN: z.string().optional(),
 
   API_PORT: z.coerce.number().int().positive().default(3000),
+  API_TOKEN: z.string().optional(),
+
+  WORKER_CONCURRENCY: z.coerce.number().int().positive().default(6),
+  DB_POOL_MAX: z.coerce.number().int().positive().default(5),
+  EMBED_BATCH_SIZE: z.coerce.number().int().positive().default(32),
+  JOB_HISTORY_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+  CLONE_MAX_REPOS: z.coerce.number().int().positive().default(50),
+  INDEX_RECOVER_ON_STARTUP: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

@@ -15,6 +15,7 @@
     "@codeoracle/config": "workspace:*",
     "@codeoracle/contracts": "workspace:*",
     "@codeoracle/db": "workspace:*",
+    "@codeoracle/observability": "workspace:*",
     "@codeoracle/queue": "workspace:*"
   },
   "devDependencies": {

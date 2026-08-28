@@ -18,7 +18,7 @@ import { createQdrantClient, deleteRepoChunkVectors } from "@codeoracle/retrieva
 import { cloneGithubRepo, ensureCloneDir } from "../crawler/github-clone.js";
 import { crawlGithubHistory, crawlLocalGitHistory } from "../crawler/github-history.js";
 import { listSourceFiles, resolveRepoHeadSha } from "../crawler/walk-files.js";
-import { beginIndexRun, clearIndexRun, getPendingFileCount } from "../lib/index-progress.js";
+import { beginIndexRun, clearIndexRun, getIndexRunStats, getPendingFileCount } from "../lib/index-progress.js";
 
 export async function runFullIndexSetup(opts: {
   env: Env;
@@ -58,7 +58,7 @@ export async function runFullIndexSetup(opts: {
       repoRoot = repo.localClonePath!;
     } else {
       if (!opts.env.GITHUB_PAT) throw new Error("GITHUB_PAT required for GitHub repos");
-      await ensureCloneDir(opts.env.CODEORACLE_CLONE_DIR);
+      await ensureCloneDir(opts.env.CODEORACLE_CLONE_DIR, opts.env.CLONE_MAX_REPOS);
       repoRoot = await cloneGithubRepo({
         cloneRoot: opts.env.CODEORACLE_CLONE_DIR,
         githubFullName: repo.githubFullName,
@@ -131,6 +131,24 @@ export async function finalizeIndexIfComplete(opts: {
 }): Promise<boolean> {
   const remaining = await getPendingFileCount(opts.redis, opts.repoId);
   if (remaining > 0) return false;
+
+  const stats = await getIndexRunStats(opts.redis, opts.repoId);
+  const allFilesFailed = stats.total > 0 && stats.failed >= stats.total;
+
+  if (allFilesFailed) {
+    await opts.db.update(repos).set({ indexStatus: "error" }).where(eq(repos.id, opts.repoId));
+    console.error(
+      `Index failed repo=${opts.repoId}: all ${stats.total} file jobs failed`,
+    );
+    await clearIndexRun(opts.redis, opts.repoId);
+    return false;
+  }
+
+  if (stats.failed > 0) {
+    console.warn(
+      `Index completed with partial failures repo=${opts.repoId}: ${stats.failed}/${stats.total} files failed`,
+    );
+  }
 
   await opts.db
     .update(repos)
