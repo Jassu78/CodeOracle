@@ -2,19 +2,25 @@
   "name": "@codeoracle/api",
   "version": "0.0.0",
   "private": true,
-  "description": "NestJS HTTP: repo registration, GitHub webhooks, admin, tokens. STUB — see README.",
+  "description": "HTTP API: repo registration, index queueing, health.",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit",
+    "build": "tsup src/main.ts --format esm --dts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "start": "tsx src/main.ts"
   },
   "dependencies": {
+    "@codeoracle/config": "workspace:*",
     "@codeoracle/contracts": "workspace:*",
-    "@codeoracle/config": "workspace:*"
+    "@codeoracle/db": "workspace:*",
+    "@codeoracle/observability": "workspace:*",
+    "@codeoracle/queue": "workspace:*"
   },
   "devDependencies": {
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

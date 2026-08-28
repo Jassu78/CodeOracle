@@ -16,6 +16,7 @@ export default defineConfig({
     "./src/schema/decisions.ts",
     "./src/schema/job-history.ts",
     "./src/schema/api-tokens.ts",
+    "./src/schema/github-sources.ts",
   ],
   out: "./drizzle",
   dialect: "postgresql",

@@ -25,6 +25,8 @@ export const chunks = pgTable(
     // Change detection without re-diffing content on incremental reindex.
     contentHash: text("content_hash").notNull(),
     embeddingModelId: text("embedding_model_id"),
+    /** pending → embedded | failed (G2.12 — tracks Qdrant upsert state). */
+    embeddingStatus: text("embedding_status").notNull().default("pending"),
     qdrantPointId: text("qdrant_point_id"),
     lastIndexedSha: text("last_indexed_sha").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
