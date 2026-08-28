@@ -1,24 +1,23 @@
 /**
  * Live Gemini extraction smoke — requires GEMINI_API_KEY + enabled gemini-free in providers.yaml.
- * Run: pnpm --filter @codeoracle/extraction exec vitest run test/gemini-smoke.test.ts
+ * Run: LIVE_GATEWAY_TEST=1 pnpm --filter @codeoracle/extraction exec vitest run test/gemini-smoke.test.ts
  */
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { loadEnv, loadProjectEnv, loadProvidersConfig } from "@codeoracle/config";
-import { ProviderRegistry } from "@codeoracle/gateway";
-import { logProviderUsage } from "@codeoracle/observability";
 import { extractDecisionsFromSource } from "../src/extract-from-source.js";
 
 const projectRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
-loadProjectEnv(projectRoot);
-const env = loadEnv();
-const live = process.env.LIVE_GATEWAY_TEST === "1" && Boolean(env.GEMINI_API_KEY);
+const live = process.env.LIVE_GATEWAY_TEST === "1" && Boolean(process.env.GEMINI_API_KEY);
 
 describe.skipIf(!live)("gemini live extraction smoke", () => {
   it(
     "returns valid DecisionExtractionBatch from Gemini",
     async () => {
+      const { loadEnv, loadProjectEnv, loadProvidersConfig } = await import("@codeoracle/config");
+      const { ProviderRegistry } = await import("@codeoracle/gateway");
+      const { logProviderUsage } = await import("@codeoracle/observability");
+
       loadProjectEnv(projectRoot);
       const env = loadEnv();
       const providers = loadProvidersConfig(resolve(projectRoot, env.PROVIDERS_CONFIG_PATH));
@@ -41,7 +40,6 @@ describe.skipIf(!live)("gemini live extraction smoke", () => {
           sourceUrl: "https://github.com/example/repo/pull/42",
           sourceSha: "deadbeef",
           decidedAtIso: "2026-08-01T12:00:00.000Z",
-          touchedPaths: ["packages/db"],
         },
       });
 
