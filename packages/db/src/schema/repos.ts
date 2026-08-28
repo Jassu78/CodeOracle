@@ -17,6 +17,8 @@ export const repos = pgTable(
     // pending | indexing | ready | error — kept as text, not pg enum, so adding
     // a new status later is a migration-free application-level change.
     indexStatus: text("index_status").notNull().default("pending"),
+    // Set for offline/local mirrors — never register company repos via personal PAT.
+    localClonePath: text("local_clone_path"),
     // Locked per-repo at registration time so upgrading the embedding model
     // for new repos never flag-day-migrates existing indexes.
     embeddingModelId: text("embedding_model_id"),

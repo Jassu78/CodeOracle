@@ -4,12 +4,18 @@ import * as schema from "./schema/index";
 
 export type Database = PostgresJsDatabase<typeof schema>;
 
+const poolByUrl = new Map<string, Database>();
+
 /**
- * Creates a Drizzle client. Callers pass in an already-validated
- * DATABASE_URL from @codeoracle/config — this package does not read
- * process.env directly, keeping it framework/env-source agnostic.
+ * Returns a shared Drizzle client per DATABASE_URL (one pool per process).
+ * Avoids opening a new postgres.js pool on every BullMQ job.
  */
 export function createDb(databaseUrl: string): Database {
-  const client = postgres(databaseUrl, { max: 10 });
-  return drizzle(client, { schema });
+  const existing = poolByUrl.get(databaseUrl);
+  if (existing) return existing;
+
+  const client = postgres(databaseUrl, { max: 5 });
+  const db = drizzle(client, { schema });
+  poolByUrl.set(databaseUrl, db);
+  return db;
 }

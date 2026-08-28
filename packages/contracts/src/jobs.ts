@@ -26,14 +26,21 @@ export type IncrementalReindexJobPayload = z.infer<typeof IncrementalReindexJobP
 
 export const ChunkFileJobPayloadSchema = z.object({
   repoId: z.string().uuid(),
+  repoRoot: z.string(),
   filePath: z.string(),
   sha: z.string(),
+  indexRunId: z.string().uuid(),
+  embeddingModelId: z.string(),
 });
 export type ChunkFileJobPayload = z.infer<typeof ChunkFileJobPayloadSchema>;
 
 export const EmbedChunksJobPayloadSchema = z.object({
   repoId: z.string().uuid(),
   chunkIds: z.array(z.string().uuid()).min(1),
+  embeddingModelId: z.string(),
+  filePath: z.string(),
+  sha: z.string(),
+  indexRunId: z.string().uuid(),
 });
 export type EmbedChunksJobPayload = z.infer<typeof EmbedChunksJobPayloadSchema>;
 

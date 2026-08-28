@@ -2,7 +2,7 @@
   "name": "@codeoracle/queue",
   "version": "0.0.0",
   "private": true,
-  "description": "BullMQ job contracts, idempotency keys, queue registry. STUB — see README.",
+  "description": "BullMQ job queue wrapper.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -14,7 +14,9 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@codeoracle/contracts": "workspace:*"
+    "@codeoracle/contracts": "workspace:*",
+    "bullmq": "^5.34.8",
+    "ioredis": "^5.4.2"
   },
   "devDependencies": {
     "tsup": "^8.3.5",

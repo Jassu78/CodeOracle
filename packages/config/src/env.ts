@@ -13,6 +13,9 @@ export const EnvSchema = z.object({
 
   QDRANT_URL: z.string().min(1, "QDRANT_URL is required — see .env.example"),
 
+  CODEORACLE_CLONE_DIR: z.string().default("./data/clones"),
+  PROVIDERS_CONFIG_PATH: z.string().default("./providers.yaml"),
+
   GITHUB_PAT: z.string().optional(),
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
 
@@ -21,6 +24,8 @@ export const EnvSchema = z.object({
   OPENROUTER_API_KEY: z.string().optional(),
 
   MCP_HTTP_BEARER_TOKEN: z.string().optional(),
+
+  API_PORT: z.coerce.number().int().positive().default(3000),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

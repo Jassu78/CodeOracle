@@ -20,7 +20,9 @@
     "db:generate": "pnpm --filter @codeoracle/db run generate",
     "db:migrate": "pnpm --filter @codeoracle/db run migrate",
     "chunk": "pnpm --filter @codeoracle/chunker run chunk",
-    "cli": "pnpm --filter @codeoracle/cli run start"
+    "cli": "pnpm --filter @codeoracle/cli run start",
+    "worker": "pnpm --filter @codeoracle/worker run start",
+    "api": "pnpm --filter @codeoracle/api run start"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

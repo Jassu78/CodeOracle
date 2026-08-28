@@ -5,6 +5,9 @@ coverage/
 *.log
 .env
 .env.local
+providers.yaml
+data/
+../CodeOracle-local-repos/
 .DS_Store
 .vscode/
 !.vscode/extensions.json

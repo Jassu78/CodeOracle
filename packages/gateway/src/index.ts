@@ -1,2 +1,3 @@
-// Stub — see README.md. ProviderRegistry and OpenAI-compat adapters not built yet.
-export const GATEWAY_STUB = true;
+export * from "./ports.js";
+export * from "./openai-compat-adapter.js";
+export * from "./provider-registry.js";

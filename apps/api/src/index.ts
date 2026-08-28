@@ -1,2 +1,1 @@
-// Stub — see README.md. NestJS app not built yet.
-export const API_STUB = true;
+export const API_ENTRY = "./main.js";
