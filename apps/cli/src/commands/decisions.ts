@@ -71,7 +71,7 @@ export async function runDecisionsReview(repoId: string): Promise<void> {
 /** Clear stored decisions (optional) and queue extract jobs without a full re-index. */
 export async function runDecisionsExtract(
   repoId: string,
-  opts: { clear?: boolean } = {},
+  opts: { clear?: boolean; limit?: number } = {},
 ): Promise<void> {
   loadProjectEnv(projectRoot);
   const env = loadEnv();
@@ -101,14 +101,23 @@ export async function runDecisionsExtract(
       console.log(pc.dim("Cleared existing decisions (Postgres + Qdrant)."));
     }
 
+    const limit =
+      opts.limit !== undefined && opts.limit > 0
+        ? opts.limit
+        : env.EXTRACT_QUEUE_LIMIT > 0
+          ? env.EXTRACT_QUEUE_LIMIT
+          : undefined;
+
     const { queued, skippedTrivial, skippedCommitCoveredByPr } = await queueExtractDecisionsForRepo({
       db,
       queue,
       repoId,
+      limit,
     });
     console.log(
       pc.bold(`Queued ${queued} extract jobs`) +
         pc.dim(` for ${repo.githubFullName}`) +
+        (limit ? pc.dim(` (limit=${limit})`) : "") +
         (skippedTrivial > 0 ? pc.dim(` (skipped ${skippedTrivial} trivial)`) : "") +
         (skippedCommitCoveredByPr > 0
           ? pc.dim(` (skipped ${skippedCommitCoveredByPr} commits covered by PR)`)

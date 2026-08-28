@@ -88,8 +88,16 @@ decisions
   .description("Queue extract_decisions jobs (optional --clear of stored decisions).")
   .argument("<repoId>", "Repo UUID from `repo register`")
   .option("--clear", "Delete existing decisions for this repo before queuing")
-  .action(async (repoId: string, opts: { clear?: boolean }) => {
-    await runDecisionsExtract(repoId, { clear: Boolean(opts.clear) });
+  .option(
+    "--limit <n>",
+    "Queue at most N sources (PRs first). Overrides EXTRACT_QUEUE_LIMIT.",
+    (v: string) => Number.parseInt(v, 10),
+  )
+  .action(async (repoId: string, opts: { clear?: boolean; limit?: number }) => {
+    await runDecisionsExtract(repoId, {
+      clear: Boolean(opts.clear),
+      limit: Number.isFinite(opts.limit) ? opts.limit : undefined,
+    });
   });
 
 program.parse();

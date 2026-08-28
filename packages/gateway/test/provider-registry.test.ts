@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { ProvidersConfig } from "@codeoracle/contracts";
-import { ProviderRegistry } from "../src/provider-registry.js";
+import { ProviderRegistry, resetSharedCircuitBreaker } from "../src/provider-registry.js";
 
 const testConfig: ProvidersConfig = {
   chat: [
@@ -40,6 +40,7 @@ describe("ProviderRegistry", () => {
   const env = { PRIMARY_KEY: "secret" };
 
   beforeEach(() => {
+    resetSharedCircuitBreaker();
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
@@ -129,5 +130,43 @@ describe("ProviderRegistry", () => {
     const result = await registry.embed(["hello"]);
     expect(result.vectors).toHaveLength(1);
     expect(result.providerId).toBe("embed-local");
+  });
+
+  it("opens circuit after repeated 429s and skips that provider", async () => {
+    let primaryHits = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("primary.example")) {
+          primaryHits += 1;
+          return new Response("rate limited", { status: 429 });
+        }
+        if (url.includes("fallback.example")) {
+          return Response.json({
+            choices: [{ message: { content: '{"decisions":[]}' } }],
+            usage: { total_tokens: 1 },
+          });
+        }
+        return new Response("not found", { status: 404 });
+      }),
+    );
+
+    let now = 1_000;
+    const registry = new ProviderRegistry({
+      config: testConfig,
+      env,
+      circuitBreaker: { failureThreshold: 2, cooldownMs: 60_000, now: () => now },
+    });
+
+    await registry.complete("s", "u"); // 429 #1 → fallback
+    await registry.complete("s", "u"); // 429 #2 → opens circuit, fallback
+    expect(primaryHits).toBe(2);
+
+    await registry.complete("s", "u"); // primary skipped while open
+    expect(primaryHits).toBe(2);
+
+    now += 61_000; // cool-down expired → half-open probe
+    await registry.complete("s", "u");
+    expect(primaryHits).toBe(3);
   });
 });

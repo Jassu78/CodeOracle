@@ -8,6 +8,10 @@ export type WorkerLeaderLock = {
   release: () => Promise<void>;
 };
 
+/**
+ * Ensure only one worker process consumes jobs per REDIS_URL.
+ * Multiple workers race (duplicate extracts, stale provider configs).
+ */
 export async function acquireWorkerLeaderLock(redis: IORedis): Promise<WorkerLeaderLock> {
   const token = `${process.pid}:${Date.now()}`;
   const acquired = await redis.set(LOCK_KEY, token, "EX", LOCK_TTL_SEC, "NX");
@@ -20,7 +24,11 @@ export async function acquireWorkerLeaderLock(redis: IORedis): Promise<WorkerLea
   }
 
   const refresh = setInterval(() => {
-    void redis.expire(LOCK_KEY, LOCK_TTL_SEC);
+    void (async () => {
+      // Only renew if we still own the lock (avoid extending a stolen/expired key).
+      const current = await redis.get(LOCK_KEY);
+      if (current === token) await redis.expire(LOCK_KEY, LOCK_TTL_SEC);
+    })();
   }, REFRESH_MS);
   refresh.unref();
 
