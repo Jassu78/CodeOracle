@@ -96,6 +96,9 @@ importers:
       '@codeoracle/queue':
         specifier: workspace:*
         version: link:../../packages/queue
+      '@codeoracle/retrieval':
+        specifier: workspace:*
+        version: link:../../packages/retrieval
       '@codeoracle/worker':
         specifier: workspace:*
         version: link:../worker
@@ -149,6 +152,9 @@ importers:
       '@codeoracle/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@codeoracle/extraction':
+        specifier: workspace:*
+        version: link:../../packages/extraction
       '@codeoracle/gateway':
         specifier: workspace:*
         version: link:../../packages/gateway
@@ -308,12 +314,18 @@ importers:
 
   packages/extraction:
     dependencies:
+      '@codeoracle/config':
+        specifier: workspace:*
+        version: link:../config
       '@codeoracle/contracts':
         specifier: workspace:*
         version: link:../contracts
       '@codeoracle/gateway':
         specifier: workspace:*
         version: link:../gateway
+      '@codeoracle/observability':
+        specifier: workspace:*
+        version: link:../observability
     devDependencies:
       tsup:
         specifier: ^8.3.5
@@ -345,6 +357,10 @@ importers:
         version: 2.1.9(@types/node@22.20.1)
 
   packages/observability:
+    dependencies:
+      '@codeoracle/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       tsup:
         specifier: ^8.3.5

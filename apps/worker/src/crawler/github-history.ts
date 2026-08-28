@@ -1,6 +1,9 @@
 import { Octokit } from "@octokit/rest";
 import type { Database } from "@codeoracle/db";
 import { githubSources } from "@codeoracle/db";
+import { listCommitTouchedPaths, normalizePathList } from "../lib/commit-paths.js";
+
+const MAX_TOUCHED_PATHS = 100;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -43,17 +46,60 @@ async function upsertGithubSource(
     .insert(githubSources)
     .values(row)
     .onConflictDoUpdate({
-      target: [githubSources.repoId, githubSources.sourceSha],
+      target: [githubSources.repoId, githubSources.sourceType, githubSources.externalId],
       set: {
-        sourceType: row.sourceType,
-        externalId: row.externalId,
         title: row.title,
         body: row.body,
         sourceUrl: row.sourceUrl,
+        sourceSha: row.sourceSha,
         mergedAt: row.mergedAt,
         rawJson: row.rawJson,
       },
     });
+}
+
+async function listPrTouchedPaths(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  pullNumber: number,
+): Promise<string[]> {
+  const paths: string[] = [];
+  let page = 1;
+  while (paths.length < MAX_TOUCHED_PATHS && page <= 5) {
+    const { data } = await withRateLimitRetry(() =>
+      octokit.rest.pulls.listFiles({
+        owner,
+        repo,
+        pull_number: pullNumber,
+        per_page: 100,
+        page,
+      }),
+    );
+    if (data.length === 0) break;
+    for (const file of data) {
+      if (file.filename) paths.push(file.filename);
+      if (paths.length >= MAX_TOUCHED_PATHS) break;
+    }
+    if (data.length < 100) break;
+    page += 1;
+  }
+  return normalizePathList(paths).slice(0, MAX_TOUCHED_PATHS);
+}
+
+async function listCommitTouchedPathsViaApi(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  sha: string,
+): Promise<string[]> {
+  const { data } = await withRateLimitRetry(() =>
+    octokit.rest.repos.getCommit({ owner, repo, ref: sha }),
+  );
+  const paths = (data.files ?? [])
+    .map((f) => f.filename)
+    .filter((name): name is string => Boolean(name));
+  return normalizePathList(paths).slice(0, MAX_TOUCHED_PATHS);
 }
 
 export async function crawlGithubHistory(opts: {
@@ -66,6 +112,7 @@ export async function crawlGithubHistory(opts: {
   if (!owner || !repo) throw new Error(`Invalid github full name: ${opts.githubFullName}`);
   const octokit = new Octokit({ auth: opts.pat });
 
+  const prMergeShas = new Set<string>();
   let prCount = 0;
   let prPage = 1;
   while (prPage <= 5) {
@@ -82,6 +129,14 @@ export async function crawlGithubHistory(opts: {
 
     for (const pr of pulls) {
       if (!pr.merged_at) continue;
+      const mergeSha = pr.merge_commit_sha ?? pr.head.sha;
+      let touchedPaths: string[] = [];
+      try {
+        touchedPaths = await listPrTouchedPaths(octokit, owner, repo, pr.number);
+      } catch {
+        touchedPaths = [];
+      }
+
       await upsertGithubSource(opts.db, {
         repoId: opts.repoId,
         sourceType: "pr",
@@ -89,10 +144,11 @@ export async function crawlGithubHistory(opts: {
         title: pr.title,
         body: pr.body ?? "",
         sourceUrl: pr.html_url ?? null,
-        sourceSha: pr.merge_commit_sha ?? pr.head.sha,
+        sourceSha: mergeSha,
         mergedAt: new Date(pr.merged_at),
-        rawJson: pr as unknown as Record<string, unknown>,
+        rawJson: { ...(pr as unknown as Record<string, unknown>), touchedPaths },
       });
+      if (mergeSha) prMergeShas.add(mergeSha);
       prCount += 1;
     }
     prPage += 1;
@@ -112,6 +168,16 @@ export async function crawlGithubHistory(opts: {
     if (commits.length === 0) break;
 
     for (const commit of commits) {
+      // Skip commits already covered by a merged PR (prefer PR bodies for extract).
+      if (prMergeShas.has(commit.sha)) continue;
+
+      let touchedPaths: string[] = [];
+      try {
+        touchedPaths = await listCommitTouchedPathsViaApi(octokit, owner, repo, commit.sha);
+      } catch {
+        touchedPaths = [];
+      }
+
       await upsertGithubSource(opts.db, {
         repoId: opts.repoId,
         sourceType: "commit",
@@ -121,7 +187,7 @@ export async function crawlGithubHistory(opts: {
         sourceUrl: commit.html_url ?? null,
         sourceSha: commit.sha,
         mergedAt: commit.commit.author?.date ? new Date(commit.commit.author.date) : null,
-        rawJson: commit as unknown as Record<string, unknown>,
+        rawJson: { ...(commit as unknown as Record<string, unknown>), touchedPaths },
       });
       commitCount += 1;
       if (commitCount >= 200) break;
@@ -136,30 +202,49 @@ export async function crawlLocalGitHistory(opts: {
   db: Database;
   repoId: string;
   repoRoot: string;
+  /** Used for local:// citations when no GitHub remote is discoverable. */
+  repoSlug?: string;
 }): Promise<{ commitCount: number }> {
   const { execFile } = await import("node:child_process");
   const { promisify } = await import("node:util");
+  const { commitCitationUrl, resolveGithubHttpsBase } = await import("../lib/citation-url.js");
   const exec = promisify(execFile);
   const { stdout } = await exec(
     "git",
-    ["log", "--format=%H%x09%s%x09%b", "-n", "200"],
-    { cwd: opts.repoRoot },
+    // NUL-delimited records so multi-line commit bodies do not corrupt SHAs.
+    ["log", "-n", "200", "--format=%H%x00%s%x00%b%x00%aI%x00"],
+    { cwd: opts.repoRoot, maxBuffer: 20 * 1024 * 1024 },
   );
 
+  const githubHttpsBase = await resolveGithubHttpsBase(opts.repoRoot);
+  const repoSlug =
+    opts.repoSlug ??
+    (githubHttpsBase?.split("/").slice(-2).join("/") ?? opts.repoRoot.split("/").pop() ?? "local-repo");
+
+  const parts = stdout.split("\0");
   let commitCount = 0;
-  for (const line of stdout.split("\n").filter(Boolean)) {
-    const [sha, subject, ...bodyParts] = line.split("\t");
-    if (!sha) continue;
+  for (let i = 0; i + 3 < parts.length; i += 4) {
+    const sha = parts[i]?.trim() ?? "";
+    const subject = parts[i + 1] ?? "";
+    const body = parts[i + 2] ?? "";
+    const authorDate = parts[i + 3]?.trim() ?? "";
+    if (!/^[0-9a-f]{7,40}$/i.test(sha)) continue;
+
+    const touchedPaths = (await listCommitTouchedPaths(opts.repoRoot, sha)).slice(
+      0,
+      MAX_TOUCHED_PATHS,
+    );
+
     await upsertGithubSource(opts.db, {
       repoId: opts.repoId,
       sourceType: "commit",
       externalId: sha,
-      title: subject ?? "",
-      body: bodyParts.join("\t"),
-      sourceUrl: null,
+      title: subject,
+      body,
+      sourceUrl: commitCitationUrl({ githubHttpsBase, repoSlug, sha }),
       sourceSha: sha,
-      mergedAt: null,
-      rawJson: { local: true },
+      mergedAt: authorDate && !Number.isNaN(Date.parse(authorDate)) ? new Date(authorDate) : null,
+      rawJson: { local: true, githubHttpsBase, touchedPaths },
     });
     commitCount += 1;
   }

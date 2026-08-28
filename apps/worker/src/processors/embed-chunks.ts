@@ -5,6 +5,7 @@ import type { Env } from "@codeoracle/config";
 import type { ProvidersConfig } from "@codeoracle/contracts";
 import { chunks, finishJobHistory, markChunksEmbeddingStatus, startJobHistory, type Database } from "@codeoracle/db";
 import { ProviderRegistry } from "@codeoracle/gateway";
+import { logProviderUsage } from "@codeoracle/observability";
 import { createQdrantClient, ensureChunksCollection, upsertChunkVectors } from "@codeoracle/retrieval";
 import type IORedis from "ioredis";
 import { finalizeIndexIfComplete } from "./full-index.js";
@@ -17,10 +18,15 @@ export async function runEmbedChunks(opts: {
   providers: ProvidersConfig;
   redis: IORedis;
   db: Database;
+  queue: import("bullmq").Queue;
   payload: EmbedChunksJobPayload;
 }): Promise<{ embedded: number }> {
   const embedBatch = opts.env.EMBED_BATCH_SIZE ?? EMBED_BATCH_DEFAULT;
-  const gateway = new ProviderRegistry(opts.providers, process.env);
+  const gateway = new ProviderRegistry({
+    config: opts.providers,
+    env: process.env,
+    onUsage: logProviderUsage,
+  });
   const qdrant = createQdrantClient(opts.env.QDRANT_URL);
   const started = Date.now();
   const jobHistoryId = await startJobHistory(opts.db, {
@@ -43,6 +49,7 @@ export async function runEmbedChunks(opts: {
         redis: opts.redis,
         db: opts.db,
         repoId: opts.payload.repoId,
+        queue: opts.queue,
       });
       return { embedded: 0 };
     }
@@ -94,6 +101,7 @@ export async function runEmbedChunks(opts: {
       redis: opts.redis,
       db: opts.db,
       repoId: opts.payload.repoId,
+      queue: opts.queue,
     });
 
     return { embedded };

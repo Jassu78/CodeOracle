@@ -4,20 +4,14 @@
 
 chat:
   # Priority order: lower number tried first. On 429/5xx/network error, next enabled
-  # endpoint by priority is tried. Non-retryable 4xx (bad key/model) is skipped, not retried.
-  - id: ollama-local
-    kind: chat
-    baseUrl: http://localhost:11434/v1
-    apiKeyEnv: null
-    model: qwen2.5-coder:7b
-    priority: 100
-    enabled: true
+  # endpoint by priority is tried. Provider-specific 4xx (bad key/model) also skips
+  # to the next endpoint — it does not retry the same endpoint.
 
   - id: gemini-free
     kind: chat
     baseUrl: https://generativelanguage.googleapis.com/v1beta/openai
     apiKeyEnv: GEMINI_API_KEY
-    model: gemini-2.0-flash
+    model: gemini-2.5-flash
     priority: 1
     enabled: false # enable once GEMINI_API_KEY is set
 
@@ -33,9 +27,19 @@ chat:
     kind: chat
     baseUrl: https://openrouter.ai/api/v1
     apiKeyEnv: OPENROUTER_API_KEY
-    model: meta-llama/llama-3.1-8b-instruct:free
-    priority: 3
+    # Free Models Router — picks an available `:free` model at request time.
+    # Or pin a specific free slug, e.g. google/gemma-4-26b-a4b-it:free
+    model: openrouter/free
+    priority: 2
     enabled: false # enable once OPENROUTER_API_KEY is set
+
+  - id: ollama-local-fallback
+    kind: chat
+    baseUrl: http://localhost:11434/v1
+    apiKeyEnv: null
+    model: qwen2.5-coder:1.5b
+    priority: 100
+    enabled: false # enable for local escape when free-cloud chat hits 429/5xx
 
 embeddings:
   - id: ollama-embed-local

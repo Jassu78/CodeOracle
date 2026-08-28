@@ -32,6 +32,11 @@ export const EnvSchema = z.object({
   DB_POOL_MAX: z.coerce.number().int().positive().default(5),
   EMBED_BATCH_SIZE: z.coerce.number().int().positive().default(32),
   JOB_HISTORY_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+  EXTRACT_CONCURRENCY: z.coerce.number().int().positive().default(2),
+  /** Drop LLM decisions below this confidence (0-1). Default 0.5. */
+  EXTRACT_MIN_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.5),
+  /** How many commits to keep in each GitHub clone for deterministic path lookup. */
+  CLONE_HISTORY_DEPTH: z.coerce.number().int().positive().default(200),
   CLONE_MAX_REPOS: z.coerce.number().int().positive().default(50),
   INDEX_RECOVER_ON_STARTUP: z
     .enum(["true", "false"])

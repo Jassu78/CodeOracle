@@ -5,6 +5,7 @@ import {
   JOB_NAMES,
   type ChunkFileJobPayload,
   type EmbedChunksJobPayload,
+  type ExtractDecisionsJobPayload,
   type FullIndexJobPayload,
 } from "@codeoracle/contracts";
 import { createDb, pruneJobHistory } from "@codeoracle/db";
@@ -17,6 +18,7 @@ import { logWorkerStartup } from "./lib/worker-banner.js";
 import { acquireWorkerLeaderLock } from "./lib/worker-leader-lock.js";
 import { runChunkFile } from "./processors/chunk-file.js";
 import { runEmbedChunks } from "./processors/embed-chunks.js";
+import { runExtractDecisions } from "./processors/extract-decisions.js";
 import { markRepoIndexError, runFullIndexSetup } from "./processors/full-index.js";
 
 const projectRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
@@ -73,7 +75,19 @@ async function main() {
         }
         case JOB_NAMES.EMBED_CHUNKS: {
           const payload = job.data as EmbedChunksJobPayload;
-          return runEmbedChunks({ env, providers, redis: connection, db, payload });
+          return runEmbedChunks({ env, providers, redis: connection, db, queue, payload });
+        }
+        case JOB_NAMES.EXTRACT_DECISIONS: {
+          const payload = job.data as ExtractDecisionsJobPayload;
+          const result = await runExtractDecisions({
+            env,
+            providers,
+            redis: connection,
+            db,
+            payload,
+          });
+          log.info("extract_decisions complete", { repoId: payload.repoId, ...result });
+          return result;
         }
         default:
           throw new Error(`Unknown job: ${job.name}`);
@@ -84,7 +98,7 @@ async function main() {
 
   worker.on("failed", async (job, err) => {
     log.error("Job failed", { jobName: job?.name, err: (err as Error).message });
-    await handleIndexJobFailure({ env, redis: connection, db, job, err: err as Error });
+    await handleIndexJobFailure({ env, redis: connection, db, queue, job, err: err as Error });
 
     const repoId = (job?.data as { repoId?: string } | undefined)?.repoId;
     if (job?.name === JOB_NAMES.FULL_INDEX && repoId && job.attemptsMade >= (job.opts.attempts ?? 1)) {

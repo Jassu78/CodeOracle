@@ -29,6 +29,20 @@
       "when": 1787925218213,
       "tag": "0003_flowery_captain_cross",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787941800000,
+      "tag": "0004_github_sources_type_external",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787942500000,
+      "tag": "0005_github_sources_unique_constraint",
+      "breakpoints": true
     }
   ]
 }

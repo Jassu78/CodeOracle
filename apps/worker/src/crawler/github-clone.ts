@@ -51,21 +51,33 @@ export async function cloneGithubRepo(opts: {
   githubFullName: string;
   branch: string;
   pat: string;
+  /** Commits retained for deterministic path lookup during extract. Default 200. */
+  historyDepth?: number;
 }): Promise<string> {
+  const depth = Math.max(1, opts.historyDepth ?? 200);
+  const depthArg = String(depth);
   const target = join(opts.cloneRoot, opts.githubFullName.replace("/", "__"));
   const authUrl = `https://x-access-token:${opts.pat}@github.com/${opts.githubFullName}.git`;
   const gitEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
 
   try {
     await access(join(target, ".git"));
-    await execFileAsync("git", ["fetch", "origin", opts.branch, "--depth", "1"], { cwd: target, env: gitEnv });
-    await execFileAsync("git", ["checkout", opts.branch], { cwd: target, env: gitEnv });
-    await execFileAsync("git", ["reset", "--hard", `origin/${opts.branch}`], { cwd: target, env: gitEnv });
-    return target;
-  } catch {
-    await execFileAsync("git", ["clone", "--depth", "1", "--branch", opts.branch, authUrl, target], {
+    await execFileAsync("git", ["fetch", "origin", opts.branch, "--depth", depthArg], {
+      cwd: target,
       env: gitEnv,
     });
+    await execFileAsync("git", ["checkout", opts.branch], { cwd: target, env: gitEnv });
+    await execFileAsync("git", ["reset", "--hard", `origin/${opts.branch}`], {
+      cwd: target,
+      env: gitEnv,
+    });
+    return target;
+  } catch {
+    await execFileAsync(
+      "git",
+      ["clone", "--depth", depthArg, "--branch", opts.branch, authUrl, target],
+      { env: gitEnv },
+    );
     return target;
   }
 }

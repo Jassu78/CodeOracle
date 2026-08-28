@@ -11,11 +11,13 @@
     "build": "tsup src/index.ts --format cjs,esm --dts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
     "@codeoracle/contracts": "workspace:*",
-    "@codeoracle/gateway": "workspace:*"
+    "@codeoracle/gateway": "workspace:*",
+    "@codeoracle/config": "workspace:*",
+    "@codeoracle/observability": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.3.5",

@@ -19,6 +19,7 @@
     "@codeoracle/config": "workspace:*",
     "@codeoracle/contracts": "workspace:*",
     "@codeoracle/db": "workspace:*",
+    "@codeoracle/extraction": "workspace:*",
     "@codeoracle/gateway": "workspace:*",
     "@codeoracle/observability": "workspace:*",
     "@codeoracle/queue": "workspace:*",

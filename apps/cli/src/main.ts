@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { runDoctor } from "./commands/doctor.js";
+import { runDecisionsExtract, runDecisionsReview } from "./commands/decisions.js";
 import { runRepoIndex, runRepoRecover, runRepoRegister, runRepoStatus } from "./commands/repo.js";
 
 const program = new Command();
@@ -70,6 +71,25 @@ repo
   .argument("<repoId>", "Repo UUID from `repo register`")
   .action(async (repoId: string) => {
     await runRepoStatus(repoId);
+  });
+
+const decisions = program.command("decisions").description("Inspect extracted architectural decisions.");
+
+decisions
+  .command("review")
+  .description("Print stored decisions for manual QA (D3.5).")
+  .argument("<repoId>", "Repo UUID from `repo register`")
+  .action(async (repoId: string) => {
+    await runDecisionsReview(repoId);
+  });
+
+decisions
+  .command("extract")
+  .description("Queue extract_decisions jobs (optional --clear of stored decisions).")
+  .argument("<repoId>", "Repo UUID from `repo register`")
+  .option("--clear", "Delete existing decisions for this repo before queuing")
+  .action(async (repoId: string, opts: { clear?: boolean }) => {
+    await runDecisionsExtract(repoId, { clear: Boolean(opts.clear) });
   });
 
 program.parse();

@@ -48,6 +48,7 @@ export async function recoverStaleIndexRun(opts: {
       redis: opts.redis,
       db: opts.db,
       repoId: opts.repoId,
+      queue: opts.queue,
     });
     return {
       repoId: opts.repoId,

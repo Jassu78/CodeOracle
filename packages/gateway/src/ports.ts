@@ -20,3 +20,5 @@ export interface ChatCompletionResult {
 export interface ChatProviderPort {
   complete(system: string, user: string): Promise<ChatCompletionResult>;
 }
+
+export type { ProviderUsageEvent, ProviderUsageLogger } from "@codeoracle/contracts";
