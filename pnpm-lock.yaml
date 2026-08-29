@@ -166,6 +166,9 @@ importers:
       '@codeoracle/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@codeoracle/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
       '@codeoracle/retrieval':
         specifier: workspace:*
         version: link:../../packages/retrieval

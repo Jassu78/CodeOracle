@@ -20,6 +20,7 @@
     "@codeoracle/db": "workspace:*",
     "@codeoracle/gateway": "workspace:*",
     "@codeoracle/observability": "workspace:*",
+    "@codeoracle/queue": "workspace:*",
     "@codeoracle/retrieval": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "drizzle-orm": "^0.45.2",

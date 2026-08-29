@@ -30,6 +30,7 @@
     "decisions:review": "pnpm --filter @codeoracle/cli run start -- decisions review",
     "worker": "pnpm --filter @codeoracle/worker run start",
     "mcp": "pnpm --filter @codeoracle/mcp-server run start",
+    "mcp:http": "CODEORACLE_MCP_TRANSPORT=http pnpm --filter @codeoracle/mcp-server run start",
     "api": "pnpm --filter @codeoracle/api run start"
   },
   "devDependencies": {

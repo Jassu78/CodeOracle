@@ -10,44 +10,87 @@ function constantTimeEquals(a: string, b: string): boolean {
   return timingSafeEqual(bufA, bufB);
 }
 
-function bearerToken(req: IncomingMessage): string | null {
+export function bearerToken(req: IncomingMessage): string | null {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) return null;
-  return header.slice("Bearer ".length);
+  const token = header.slice("Bearer ".length).trim();
+  return token.length > 0 ? token : null;
 }
 
 /**
- * Two token classes, both real (no unused schema):
- *  - `API_TOKEN` env var — single admin/bootstrap token, constant-time compared.
- *  - Per-repo tokens in `api_tokens` (see `createApiToken`) — hash-looked-up
- *    in Postgres; presence of any valid, non-revoked token authorizes admin
- *    routes today (routes aren't yet scoped per-repo — see apps/api/README.md).
- *
- * If neither `API_TOKEN` nor any `api_tokens` row exists, auth is open
- * (local dev default, unchanged from before).
+ * Authenticated caller. `admin` is the process-wide `API_TOKEN`.
+ * `repo` is a hashed per-repo token bound to exactly one `repoId` (H6).
  */
-export async function isAuthorized(req: IncomingMessage, env: Env, db: Database): Promise<boolean> {
+export type AuthPrincipal =
+  | { kind: "admin" }
+  | { kind: "repo"; repoId: string; tokenId: string };
+
+/**
+ * Resolve the bearer to a principal, or null if missing/invalid.
+ * Does not apply open-dev fallback — callers use `isOpenDevAuth`.
+ */
+export async function resolveAuth(
+  req: IncomingMessage,
+  env: Env,
+  db: Database,
+): Promise<AuthPrincipal | null> {
   const token = bearerToken(req);
+  if (!token) return null;
 
-  if (env.API_TOKEN) {
-    if (token && constantTimeEquals(token, env.API_TOKEN)) return true;
+  if (env.API_TOKEN && constantTimeEquals(token, env.API_TOKEN)) {
+    return { kind: "admin" };
   }
 
-  if (token) {
-    const row = await verifyApiToken(db, token);
-    if (row) return true;
-  }
+  const row = await verifyApiToken(db, token);
+  if (row) return { kind: "repo", repoId: row.repoId, tokenId: row.id };
 
-  // Open by default only when no token mechanism is configured at all.
-  return !env.API_TOKEN && (await hasNoApiTokens(db));
+  return null;
 }
 
-async function hasNoApiTokens(db: Database): Promise<boolean> {
-  // Cheap existence check via a 1-row probe rather than a count() scan.
+/** True when no auth mechanism is configured — local-dev open mode. */
+export async function isOpenDevAuth(env: Env, db: Database): Promise<boolean> {
+  if (env.API_TOKEN) return false;
   const rows = await db.select({ id: apiTokens.id }).from(apiTokens).limit(1);
   return rows.length === 0;
 }
 
+/**
+ * Authorize access to a specific repo.
+ * - admin → any repo
+ * - repo token → only its minting repoId
+ * - open-dev (no principal, openDev=true) → allow
+ */
+export function authorizeForRepo(
+  principal: AuthPrincipal | null,
+  repoId: string,
+  openDev: boolean,
+): boolean {
+  if (openDev && !principal) return true;
+  if (!principal) return false;
+  if (principal.kind === "admin") return true;
+  return principal.repoId === repoId;
+}
+
+/** Global admin actions (e.g. POST /repos register) — admin or open-dev only. */
+export function authorizeAdmin(principal: AuthPrincipal | null, openDev: boolean): boolean {
+  if (openDev && !principal) return true;
+  return principal?.kind === "admin";
+}
+
+/**
+ * @deprecated Prefer resolveAuth + authorizeForRepo. Kept for call sites mid-migration.
+ * Unscoped: any valid token (or open-dev) returns true — does NOT enforce H6.
+ */
+export async function isAuthorized(req: IncomingMessage, env: Env, db: Database): Promise<boolean> {
+  const openDev = await isOpenDevAuth(env, db);
+  if (openDev) return true;
+  return (await resolveAuth(req, env, db)) !== null;
+}
+
 export function unauthorizedBody(): { error: string } {
   return { error: "unauthorized — set Authorization: Bearer <API_TOKEN or per-repo token>" };
+}
+
+export function forbiddenBody(): { error: string } {
+  return { error: "forbidden — token is not scoped to this repository" };
 }

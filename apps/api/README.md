@@ -1,37 +1,38 @@
 # @codeoracle/api
 
-**Status:** Stage 4 — plain `node:http` server in `src/main.ts` (Nest scaffold unused).
+**Status:** Stage 5 — plain `node:http` server in `src/main.ts` (Nest scaffold unused).
 
 ## Endpoints
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/health` | No | Deep health — Postgres, Redis, Qdrant |
-| POST | `/repos` | Bearer* | Register GitHub or local repo |
-| GET | `/repos/:id` | Bearer* | Repo status |
-| POST | `/repos/:id/index` | Bearer* | Queue `full_index` (Redis-backed rate limit: 10/min/client) |
-| POST | `/repos/:id/tokens` | Bearer* | Issue a per-repo API token (shown once) |
-| GET | `/repos/:id/tokens` | Bearer* | List token metadata for a repo (no secrets returned) |
-| DELETE | `/repos/:id/tokens/:tokenId` | Bearer* | Revoke a token |
-| POST | `/webhooks/github` | **HMAC** (`X-Hub-Signature-256`) | Push → queue `incremental_reindex` (idempotent job id) |
+| POST | `/repos` | **Admin** | Register GitHub or local repo |
+| GET | `/repos/:id` | **Scoped** | Repo status |
+| POST | `/repos/:id/index` | **Scoped** | Queue `full_index` (Redis rate limit: 10/min/client) |
+| POST | `/repos/:id/tokens` | **Admin** | Issue a per-repo API token (shown once) |
+| GET | `/repos/:id/tokens` | **Scoped** | List token metadata for a repo (no secrets returned) |
+| DELETE | `/repos/:id/tokens/:tokenId` | **Scoped** | Revoke a token |
+| POST | `/webhooks/github` | **HMAC** (`X-Hub-Signature-256`) | Push → queue `incremental_reindex` |
 
-\*Bearer required unless **both** `API_TOKEN` is unset **and** no `api_tokens` rows exist (local dev default = open).
+### Auth model (D5.3 / H6 — scoped)
 
-### Auth model — honest current state
+| Principal | How | Can access |
+|-----------|-----|------------|
+| **Admin** | `API_TOKEN` env (constant-time) | Any repo + register + mint tokens |
+| **Repo token** | `api_tokens` row (SHA-256 at rest) | **Only** the `repoId` it was minted for |
+| **Open-dev** | No `API_TOKEN` and zero `api_tokens` rows | All routes (local default) |
 
-Two token classes, both real (no unused schema — see `packages/db/src/repositories/api-tokens.ts`):
-
-1. **`API_TOKEN` env var** — a single bootstrap/admin token, constant-time compared.
-2. **Per-repo tokens** (`api_tokens` table) — minted via `POST /repos/:id/tokens`, only the SHA-256 hash is stored, the raw value is returned exactly once. Verified by hash lookup (`verifyApiToken`), and `lastUsedAt` is updated on each successful use.
-
-**What's still MVP, not full production auth:** routes are not yet scoped per-repo — any valid token (env or DB) authorizes every admin route above, not just the repo it was minted for. **Stage 5 D5.3 / H6 residual:** true per-route repo scoping is required before ship — do not treat the token table as “done auth.”
+Cross-repo use of a repo token → **403**. Missing/invalid bearer when auth is configured → **401**.
 
 ```bash
-# Mint a token for a repo (requires an existing admin token or open dev mode)
-curl -X POST localhost:3000/repos/<repoId>/tokens
+# Mint (admin or open-dev)
+curl -H "Authorization: Bearer $API_TOKEN" -X POST localhost:3000/repos/<repoId>/tokens
 # → {"id":"...","token":"co_...","warning":"shown once — store it now"}
-```
 
+# Repo-scoped index
+curl -H "Authorization: Bearer $REPO_TOKEN" -X POST localhost:3000/repos/<repoId>/index
+```
 ## GitHub webhook (Step 4)
 
 1. Set `GITHUB_WEBHOOK_SECRET` in `.env` (same value as the GitHub webhook secret).
