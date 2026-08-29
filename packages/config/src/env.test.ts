@@ -27,4 +27,23 @@ describe("loadEnv", () => {
   it("rejects an invalid NODE_ENV value", () => {
     expect(() => loadEnv({ ...validBase, NODE_ENV: "staging" } as unknown as NodeJS.ProcessEnv)).toThrow();
   });
+
+  it("accepts optional CODEORACLE_REPO_ID when it is a uuid", () => {
+    const env = loadEnv({
+      ...validBase,
+      CODEORACLE_REPO_ID: "9462ddb7-6064-4620-87c7-584566f643af",
+    } as NodeJS.ProcessEnv);
+    expect(env.CODEORACLE_REPO_ID).toBe("9462ddb7-6064-4620-87c7-584566f643af");
+  });
+
+  it("rejects non-uuid CODEORACLE_REPO_ID", () => {
+    expect(() =>
+      loadEnv({ ...validBase, CODEORACLE_REPO_ID: "not-a-uuid" } as NodeJS.ProcessEnv),
+    ).toThrow(EnvValidationError);
+  });
+
+  it("treats empty CODEORACLE_REPO_ID as unset", () => {
+    const env = loadEnv({ ...validBase, CODEORACLE_REPO_ID: "" } as NodeJS.ProcessEnv);
+    expect(env.CODEORACLE_REPO_ID).toBeUndefined();
+  });
 });

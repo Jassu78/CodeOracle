@@ -2,7 +2,7 @@
   "name": "@codeoracle/api",
   "version": "0.0.0",
   "private": true,
-  "description": "HTTP API: repo registration, index queueing, health.",
+  "description": "HTTP API: repo registration, index queueing, GitHub webhooks, health.",
   "type": "module",
   "scripts": {
     "build": "tsup src/main.ts --format esm --dts",
@@ -16,7 +16,8 @@
     "@codeoracle/contracts": "workspace:*",
     "@codeoracle/db": "workspace:*",
     "@codeoracle/observability": "workspace:*",
-    "@codeoracle/queue": "workspace:*"
+    "@codeoracle/queue": "workspace:*",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "tsup": "^8.3.5",

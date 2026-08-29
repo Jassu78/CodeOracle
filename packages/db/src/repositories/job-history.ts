@@ -3,6 +3,24 @@ import { and, eq } from "drizzle-orm";
 import type { Database } from "../client.js";
 import { jobHistory } from "../schema/job-history.js";
 
+export async function findJobHistoryByKey(
+  db: Database,
+  opts: { repoId: string; jobType: string; afterSha: string },
+): Promise<{ id: string; status: string } | null> {
+  const [row] = await db
+    .select({ id: jobHistory.id, status: jobHistory.status })
+    .from(jobHistory)
+    .where(
+      and(
+        eq(jobHistory.repoId, opts.repoId),
+        eq(jobHistory.jobType, opts.jobType),
+        eq(jobHistory.afterSha, opts.afterSha),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
 export async function startJobHistory(
   db: Database,
   opts: {

@@ -77,3 +77,12 @@ export async function getRepoById(db: Database, repoId: string) {
   const [row] = await db.select().from(repos).where(eq(repos.id, repoId)).limit(1);
   return row ?? null;
 }
+
+export async function getRepoByGithubFullName(db: Database, githubFullName: string) {
+  const [row] = await db
+    .select()
+    .from(repos)
+    .where(eq(repos.githubFullName, githubFullName))
+    .limit(1);
+  return row ?? null;
+}

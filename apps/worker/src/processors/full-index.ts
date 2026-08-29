@@ -16,11 +16,12 @@ import { logProviderUsage } from "@codeoracle/observability";
 import { bullJobId } from "@codeoracle/queue";
 import type { Queue } from "bullmq";
 import type IORedis from "ioredis";
-import { createQdrantClient, deleteRepoChunkVectors, deleteRepoDecisionVectors } from "@codeoracle/retrieval";
+import { createQdrantClient, deleteRepoDecisionVectors, recreateHybridChunksCollection } from "@codeoracle/retrieval";
 import { cloneGithubRepo, ensureCloneDir } from "../crawler/github-clone.js";
 import { crawlGithubHistory, crawlLocalGitHistory } from "../crawler/github-history.js";
 import { listSourceFiles, resolveRepoHeadSha } from "../crawler/walk-files.js";
-import { beginIndexRun, clearIndexRun, getIndexRunStats, getPendingFileCount } from "../lib/index-progress.js";
+import { flushDeferredPushToQueue } from "../lib/deferred-push.js";
+import { beginIndexRun, clearIndexRun, getIndexRunKind, getIndexRunStats, getPendingFileCount } from "../lib/index-progress.js";
 import { queueExtractDecisionsForRepo } from "../lib/queue-extraction-jobs.js";
 
 export async function runFullIndexSetup(opts: {
@@ -56,7 +57,11 @@ export async function runFullIndexSetup(opts: {
 
     await clearRepoChunks(db, opts.repoId);
     await clearRepoDecisions(db, opts.repoId);
-    await deleteRepoChunkVectors(qdrant, opts.repoId);
+    // Recreate hybrid collection (dense + sparse) so search_codebase can RRF.
+    const probe = await gateway.embed(["codeoracle dimension probe"]);
+    const vectorSize = probe.vectors[0]?.length;
+    if (!vectorSize) throw new Error("Embedding probe returned empty vector — cannot create Qdrant collection");
+    await recreateHybridChunksCollection(qdrant, vectorSize);
     await deleteRepoDecisionVectors(qdrant, opts.repoId);
     await clearIndexRun(opts.redis, opts.repoId);
 
@@ -169,6 +174,27 @@ export async function finalizeIndexIfComplete(opts: {
     );
   }
 
+  const kind = await getIndexRunKind(opts.redis, opts.repoId);
+
+  if (kind === "incremental") {
+    await opts.db
+      .update(repos)
+      .set({ indexStatus: "ready", lastIncrementalAt: new Date() })
+      .where(eq(repos.id, opts.repoId));
+    await clearIndexRun(opts.redis, opts.repoId);
+    // Full-history extract is only for full index. Merged-PR extract on push is G4.10
+    // (queued from incremental-reindex when afterSha maps to a merged PR).
+    if (opts.queue) {
+      await flushDeferredAfterReady({
+        redis: opts.redis,
+        queue: opts.queue,
+        db: opts.db,
+        repoId: opts.repoId,
+      });
+    }
+    return true;
+  }
+
   await opts.db
     .update(repos)
     .set({ indexStatus: "ready", lastFullIndexAt: new Date() })
@@ -194,9 +220,29 @@ export async function finalizeIndexIfComplete(opts: {
             : ""),
       );
     }
+    await flushDeferredAfterReady({
+      redis: opts.redis,
+      queue: opts.queue,
+      db: opts.db,
+      repoId: opts.repoId,
+    });
   }
 
   return true;
+}
+
+async function flushDeferredAfterReady(opts: {
+  redis: IORedis;
+  queue: Queue;
+  db: Database;
+  repoId: string;
+}): Promise<void> {
+  const result = await flushDeferredPushToQueue(opts);
+  if (result.flushed) {
+    console.info(
+      `Flushed deferred push → incremental_reindex repo=${opts.repoId} tip=${result.tipSha?.slice(0, 12)}`,
+    );
+  }
 }
 
 export async function markRepoIndexError(

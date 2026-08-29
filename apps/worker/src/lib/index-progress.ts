@@ -3,6 +3,9 @@ import type IORedis from "ioredis";
 const pendingKey = (repoId: string) => `codeoracle:index:${repoId}:pending-files`;
 const failedKey = (repoId: string) => `codeoracle:index:${repoId}:failed-files`;
 const totalKey = (repoId: string) => `codeoracle:index:${repoId}:total-files`;
+const kindKey = (repoId: string) => `codeoracle:index:${repoId}:kind`;
+
+export type IndexRunKind = "full" | "incremental";
 
 export type IndexRunStats = {
   pending: number;
@@ -10,13 +13,24 @@ export type IndexRunStats = {
   total: number;
 };
 
-export async function beginIndexRun(redis: IORedis, repoId: string, fileCount: number): Promise<void> {
+export async function beginIndexRun(
+  redis: IORedis,
+  repoId: string,
+  fileCount: number,
+  kind: IndexRunKind = "full",
+): Promise<void> {
   await redis
     .multi()
     .set(pendingKey(repoId), String(fileCount))
     .set(totalKey(repoId), String(fileCount))
     .set(failedKey(repoId), "0")
+    .set(kindKey(repoId), kind)
     .exec();
+}
+
+export async function getIndexRunKind(redis: IORedis, repoId: string): Promise<IndexRunKind> {
+  const raw = await redis.get(kindKey(repoId));
+  return raw === "incremental" ? "incremental" : "full";
 }
 
 export async function markFileComplete(redis: IORedis, repoId: string): Promise<number> {
@@ -36,7 +50,7 @@ export async function recordFileFailure(redis: IORedis, repoId: string): Promise
 }
 
 export async function clearIndexRun(redis: IORedis, repoId: string): Promise<void> {
-  await redis.del(pendingKey(repoId), failedKey(repoId), totalKey(repoId));
+  await redis.del(pendingKey(repoId), failedKey(repoId), totalKey(repoId), kindKey(repoId));
 }
 
 export async function getPendingFileCount(redis: IORedis, repoId: string): Promise<number> {

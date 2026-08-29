@@ -1,2 +1,4 @@
-// Stub — see README.md. MCP tools are implemented after @codeoracle/retrieval exists.
-export const MCP_SERVER_STUB = true;
+export { createCodeOracleMcpServer } from "./create-server.js";
+export { runFindDecisionTool, formatFindDecisionText } from "./tools/find-decision.js";
+export { runSearchCodebaseTool, formatSearchCodebaseText } from "./tools/search-codebase.js";
+export { runExplainFileTool, formatExplainFileText } from "./tools/explain-file.js";

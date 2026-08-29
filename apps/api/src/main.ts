@@ -1,11 +1,12 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnv, loadProjectEnv } from "@codeoracle/config";
-import { JOB_NAMES } from "@codeoracle/contracts";
+import { JOB_NAMES, type IncrementalReindexJobPayload } from "@codeoracle/contracts";
 import {
   createDb,
+  getRepoByGithubFullName,
   getRepoById,
   registerGithubRepo,
   registerLocalRepo,
@@ -16,21 +17,31 @@ import { isAuthorized, unauthorizedBody } from "./lib/auth.js";
 import { checkDeepHealth } from "./lib/health.js";
 import { checkRateLimit, clientKey } from "./lib/rate-limit.js";
 import { parseRegisterRepoBody } from "./lib/schemas.js";
+import { handleGithubWebhook } from "./webhooks/handle-github-push.js";
 
 const projectRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const log = createLogger("api");
 
-function sendJson(res: import("node:http").ServerResponse, status: number, body: unknown): void {
+function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(body));
 }
 
-async function readJsonBody(req: import("node:http").IncomingMessage): Promise<unknown> {
+async function readRawBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
-  const raw = Buffer.concat(chunks).toString("utf-8");
-  if (!raw.trim()) return {};
-  return JSON.parse(raw) as unknown;
+  return Buffer.concat(chunks);
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const raw = await readRawBody(req);
+  if (!raw.toString("utf8").trim()) return {};
+  return JSON.parse(raw.toString("utf8")) as unknown;
+}
+
+function isDuplicateJobError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /already exists|duplicat/i.test(msg);
 }
 
 async function main() {
@@ -45,6 +56,55 @@ async function main() {
       if (req.method === "GET" && url.pathname === "/health") {
         const health = await checkDeepHealth(env);
         sendJson(res, health.ok ? 200 : 503, health);
+        return;
+      }
+
+      // GitHub webhooks use HMAC, not API_TOKEN bearer.
+      if (req.method === "POST" && url.pathname === "/webhooks/github") {
+        const rawBody = await readRawBody(req);
+        const result = await handleGithubWebhook({
+          rawBody,
+          signatureHeader: headerString(req.headers["x-hub-signature-256"]),
+          eventHeader: headerString(req.headers["x-github-event"]),
+          deps: {
+            verifySecret: env.GITHUB_WEBHOOK_SECRET ?? "",
+            findRepoByFullName: async (githubFullName) => {
+              const row = await getRepoByGithubFullName(db, githubFullName);
+              if (!row) return null;
+              return {
+                id: row.id,
+                githubFullName: row.githubFullName,
+                indexStatus: row.indexStatus,
+              };
+            },
+            enqueueIncremental: async ({ jobId, payload }) => {
+              const connection = createRedisConnection(env.REDIS_URL);
+              const queue = createQueue(connection);
+              try {
+                await queue.add(JOB_NAMES.INCREMENTAL_REINDEX, payload satisfies IncrementalReindexJobPayload, {
+                  jobId,
+                  removeOnComplete: 100,
+                  removeOnFail: 500,
+                  attempts: 3,
+                  backoff: { type: "exponential", delay: 5000 },
+                });
+                return "queued";
+              } catch (err) {
+                if (isDuplicateJobError(err)) return "duplicate";
+                throw err;
+              } finally {
+                await queue.close();
+                await connection.quit();
+              }
+            },
+          },
+        });
+
+        log.info("GitHub webhook handled", {
+          status: result.httpStatus,
+          body: result.body,
+        });
+        sendJson(res, result.httpStatus, result.body);
         return;
       }
 
@@ -141,8 +201,17 @@ async function main() {
   });
 
   server.listen(env.API_PORT, () => {
-    log.info("API listening", { port: env.API_PORT, auth: Boolean(env.API_TOKEN) });
+    log.info("API listening", {
+      port: env.API_PORT,
+      auth: Boolean(env.API_TOKEN),
+      githubWebhook: Boolean(env.GITHUB_WEBHOOK_SECRET),
+    });
   });
+}
+
+function headerString(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
 }
 
 main().catch((err) => {
