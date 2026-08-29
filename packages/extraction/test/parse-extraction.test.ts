@@ -46,6 +46,15 @@ describe("parseExtractionBatch", () => {
     expect(batch.decisions[0]!.topic).toBe("Use Postgres");
   });
 
+  it("coerces trailing prose + string confidence + missing alts (G3.20)", () => {
+    const batch = parseExtractionBatch(
+      'Here you go:\n{"topic":"Use Redis","summary":"Need shared sessions across replicas.","confidence":"0.8"}\nThanks!',
+    );
+    expect(batch.decisions).toHaveLength(1);
+    expect(batch.decisions[0]!.confidence).toBe(0.8);
+    expect(batch.decisions[0]!.alternativesConsidered).toEqual([]);
+  });
+
   it("throws on invalid JSON", () => {
     expect(() => parseExtractionBatch("not json")).toThrow(ExtractionParseError);
   });

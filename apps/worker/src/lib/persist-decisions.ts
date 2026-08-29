@@ -38,7 +38,7 @@ export async function persistExtractedDecisions(opts: {
   let supersededLinks = 0;
 
   for (const item of opts.extracted) {
-    const embedText = decisionEmbedText(item.topic, item.summary);
+    const embedText = decisionEmbedText(item.topic, item.summary, item.alternativesConsidered);
     const embedResult = await opts.gateway.embed([embedText]);
     const vector = embedResult.vectors[0];
     if (!vector?.length) throw new Error("Embedding provider returned empty vector for decision");

@@ -8,6 +8,7 @@ import {
   closeDb,
   createDb,
   listDecisionsForReview,
+  listFailedExtractJobs,
   repos,
 } from "@codeoracle/db";
 import { createQueue, createRedisConnection } from "@codeoracle/queue";
@@ -40,9 +41,11 @@ export async function runDecisionsReview(repoId: string): Promise<void> {
       return;
     }
 
+    const emptyAlts = rows.filter((r) => r.alternativesConsidered.length === 0).length;
     console.log(
       pc.bold(`Decisions for ${repo.githubFullName ?? repo.localClonePath ?? repoId}`) +
-        pc.dim(` (${rows.length} shown, newest first)\n`),
+        pc.dim(` (${rows.length} shown, newest first)`) +
+        pc.dim(` · empty alternatives: ${emptyAlts}/${rows.length}\n`),
     );
 
     for (const [idx, row] of rows.entries()) {
@@ -61,6 +64,42 @@ export async function runDecisionsReview(repoId: string): Promise<void> {
       if (row.touchedPaths.length > 0) {
         console.log(pc.dim(`   paths: ${row.touchedPaths.join(", ")}`));
       }
+      console.log("");
+    }
+  } finally {
+    await closeDb(env.DATABASE_URL);
+  }
+}
+
+
+/** List recent failed extract_decisions jobs (G3.21). */
+export async function runDecisionsFailures(repoId: string): Promise<void> {
+  loadProjectEnv(projectRoot);
+  const env = loadEnv();
+  const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
+
+  try {
+    const [repo] = await db.select().from(repos).where(eq(repos.id, repoId)).limit(1);
+    if (!repo) {
+      console.error(pc.red(`Repo not found: ${repoId}`));
+      process.exitCode = 1;
+      return;
+    }
+
+    const rows = await listFailedExtractJobs(db, repoId, 50);
+    if (rows.length === 0) {
+      console.log(pc.green(`No failed extract jobs for ${repo.githubFullName ?? repoId}.`));
+      return;
+    }
+
+    console.log(
+      pc.bold(`Failed extract jobs for ${repo.githubFullName ?? repoId}`) +
+        pc.dim(` (${rows.length})\n`),
+    );
+    for (const row of rows) {
+      console.log(pc.red(`• ${row.createdAt.toISOString()}`) + pc.dim(` id=${row.id}`));
+      console.log(pc.dim(`  source=${row.dedupeKey ?? "(none)"} · tokens=${row.tokensUsed}`));
+      console.log(`  ${row.errorMessage ?? "(no error_message stored)"}`);
       console.log("");
     }
   } finally {

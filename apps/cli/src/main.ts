@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { runDoctor } from "./commands/doctor.js";
-import { runDecisionsExtract, runDecisionsReview } from "./commands/decisions.js";
+import { runDecisionsExtract, runDecisionsFailures, runDecisionsReview } from "./commands/decisions.js";
 import { runInit } from "./commands/init.js";
 import { runMcpConfig } from "./commands/mcp-config.js";
 import { runRepoIndex, runRepoRecover, runRepoRegister, runRepoStatus } from "./commands/repo.js";
@@ -104,6 +104,14 @@ decisions
   .argument("<repoId>", "Repo UUID from `repo register`")
   .action(async (repoId: string) => {
     await runDecisionsReview(repoId);
+  });
+
+decisions
+  .command("failures")
+  .description("List recent failed extract_decisions jobs (G3.21).")
+  .argument("<repoId>", "Repo UUID from `repo register`")
+  .action(async (repoId: string) => {
+    await runDecisionsFailures(repoId);
   });
 
 decisions

@@ -12,6 +12,10 @@ import type IORedis from "ioredis";
 import { resolveRepoRoot } from "../crawler/github-clone.js";
 import { withExtractConcurrency } from "../lib/extract-concurrency.js";
 import {
+  checkExtractTokenBudget,
+  recordExtractTokens,
+} from "../lib/extract-token-budget.js";
+import {
   MIN_EXTRACTION_CONFIDENCE,
   persistExtractedDecisions,
 } from "../lib/persist-decisions.js";
@@ -34,6 +38,19 @@ export async function runExtractDecisions(opts: {
     });
 
     try {
+      const budget = await checkExtractTokenBudget(
+        opts.redis,
+        opts.payload.repoId,
+        opts.env.EXTRACT_REPO_DAILY_TOKEN_BUDGET,
+      );
+      if (!budget.ok) {
+        await finishJobHistory(opts.db, jobHistoryId, {
+          status: "done",
+          latencyMs: Date.now() - started,
+        });
+        return { inserted: 0, skipped: true };
+      }
+
       const [source] = await opts.db
         .select()
         .from(githubSources)
@@ -124,6 +141,8 @@ export async function runExtractDecisions(opts: {
         },
       });
 
+      await recordExtractTokens(opts.redis, opts.payload.repoId, extraction.tokensUsed);
+
       // Record the provider that actually answered (after failover), not primary config.
       const extractionModelId = `${extraction.providerId}:${extraction.model}`;
 
@@ -172,9 +191,11 @@ export async function runExtractDecisions(opts: {
 
       return { inserted, skipped: false };
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       await finishJobHistory(opts.db, jobHistoryId, {
         status: "error",
         latencyMs: Date.now() - started,
+        errorMessage: message.slice(0, 2000),
       });
       throw err;
     }

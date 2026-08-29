@@ -52,10 +52,10 @@
       "breakpoints": true
     },
     {
-      "idx": 7,
+      "idx": 8,
       "version": "7",
-      "when": 1787990000000,
-      "tag": "0007_rename_job_history_dedupe_key",
+      "when": 1788010000000,
+      "tag": "0008_job_history_error_message",
       "breakpoints": true
     }
   ]

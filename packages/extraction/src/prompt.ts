@@ -23,7 +23,7 @@ Rules:
 - Do NOT copy example topics from this prompt; invent topics only from the source.
 - confidence: 0.0-1.0 — how explicit the rationale is in the source text (≤0.4 if weak/implied; high only if WHY is explicit).
 - touchedPaths: if a "Changed files (from git…)" list is provided, copy paths ONLY from that list (or []). Never invent paths or change extensions. If no list is provided, use [] unless the source text names exact paths.
-- alternativesConsidered: options explicitly mentioned or strongly implied (empty if none).
+- alternativesConsidered: when the source contrasts options (e.g. "instead of", "rather than", "vs", "chose X over Y", "rejected", "considered"), list the rejected or non-chosen options. Empty ONLY if the source names no alternative. Still never invent options that are not in the source text.
 
 JSON schema:
 {
@@ -57,6 +57,7 @@ export function buildExtractionUserPrompt(ctx: ExtractionSourceContext): string 
   lines.push(
     "",
     "Reminder: extract WHY only. If no rationale is present, return {\"decisions\":[]}.",
+    "If the body contrasts options (instead of / rather than / over / vs), fill alternativesConsidered with the non-chosen option(s).",
   );
 
   return lines.join("\n");

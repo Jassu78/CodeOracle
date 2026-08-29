@@ -59,6 +59,11 @@ export const EnvSchema = z.object({
    * 0 = no cap (queue all eligible sources). Use a small number for dogfood.
    */
   EXTRACT_QUEUE_LIMIT: z.coerce.number().int().nonnegative().default(0),
+  /**
+   * Soft per-repo daily token budget for extract_decisions (G3.19).
+   * 0 = disabled. When exceeded, extract jobs finish as done/skipped without calling the LLM.
+   */
+  EXTRACT_REPO_DAILY_TOKEN_BUDGET: z.coerce.number().int().nonnegative().default(0),
   /** How many commits to keep in each GitHub clone for deterministic path lookup. */
   CLONE_HISTORY_DEPTH: z.coerce.number().int().positive().default(200),
   CLONE_MAX_REPOS: z.coerce.number().int().positive().default(50),
