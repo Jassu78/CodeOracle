@@ -1,17 +1,14 @@
-# CodeOracle — core self-hosted stack (Postgres + Redis + Qdrant only).
-# apps/api, apps/worker, apps/mcp-server, and Ollama are added in later
-# compose files once their business logic exists.
+# CodeOracle — core self-hosted stack (Postgres + Redis + Qdrant).
+# Host apps: pnpm api / pnpm worker / pnpm mcp (see root README).
+# Optional worker+API containers: docker-compose.full.yml --profile full.
 #
 # Target: runs on a 12GB Ampere OCI Always Free instance AND on a developer
 # laptop. RAM budget comments below are rough sizing notes —
 # verify on your own hardware before treating these as guarantees.
 #
-# Port conflict note (found while verifying this scaffold): if you already
-# run a native Postgres/Redis/Qdrant on the default ports, the Docker
-# container's port-forward can silently lose to the native service on some
-# hosts, and clients will connect to the WRONG database with no obvious
-# error (you'll see e.g. "role does not exist" instead of a connection
-# error). Override via env vars before `docker compose up` if that happens:
+# Port conflict note: if you already run native Postgres/Redis/Qdrant on the
+# default ports, Docker port-forward can silently lose on some hosts and
+# clients will hit the WRONG service. Override before `docker compose up`:
 #   POSTGRES_HOST_PORT=5433 REDIS_HOST_PORT=6380 docker compose up -d
 # and update DATABASE_URL/REDIS_URL in your .env to match.
 

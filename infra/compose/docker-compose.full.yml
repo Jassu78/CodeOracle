@@ -2,8 +2,9 @@
 # Run: docker compose -f docker-compose.yml -f docker-compose.full.yml --profile full up -d
 #
 # IMPORTANT: Only one worker replica per REDIS_URL (leader lock enforced in code).
-# These services mount the repo and run via pnpm — intended for local/dev parity,
-# not production images (Dockerfiles land in Stage 5+).
+# These services mount the repo and run via pnpm — local/dev parity only.
+# Production/OCI packaging: host pnpm (supported) or future images under infra/docker.
+# MCP stays on the host (`pnpm mcp` / `pnpm mcp:http`) — editor stdio needs a local process.
 
 services:
   worker:

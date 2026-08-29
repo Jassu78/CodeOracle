@@ -152,4 +152,6 @@ PRs must pass lint, typecheck, unit, Compose smoke, integration e2e, and golden 
 
 ## License
 
-MIT — see [`LICENSE`](./LICENSE).
+MIT — see [`LICENSE`](./LICENSE). Copyright (c) 2026 Jaswanth Jogi.
+
+Launch checklist: MIT ✓ · `.env.example` ✓ · Compose data stack ✓ · host `pnpm` apps ✓. Multi-stage app images are optional later (`infra/docker`).
