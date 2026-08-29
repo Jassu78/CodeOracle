@@ -1,57 +1,59 @@
 # @codeoracle/mcp-server
 
-MCP stdio transport — thin adapter over `@codeoracle/retrieval`. Business logic does **not** live here.
+MCP transport — thin adapter over `@codeoracle/retrieval`. Business logic does **not** live here.
 
-## Stage 4 tools
+## Tools
 
 | Tool | Status |
 |------|--------|
 | `find_decision` | live |
-| `search_codebase` | live (hybrid dense+sparse RRF after full reindex; dense fallback on legacy collections) |
-| `explain_file` | live (deterministic chunks + decisions-by-path) |
+| `search_codebase` | live (hybrid dense+sparse RRF after full reindex) |
+| `explain_file` | live |
 
-## Run
+## Transports (D5.3)
+
+| Mode | Env | Auth |
+|------|-----|------|
+| **stdio** (default) | `CODEORACLE_MCP_TRANSPORT=stdio` | Process isolation (editor spawns the process) |
+| **Streamable HTTP** (+ SSE streams) | `CODEORACLE_MCP_TRANSPORT=http` | **Bearer required** — missing/invalid → 401; wrong-repo token → 403 |
+
+HTTP also: Redis rate limit (`MCP_HTTP_RATE_LIMIT_PER_MINUTE`, default 60/min/IP). Open-dev is **not** allowed on HTTP.
+
+Accepted bearers: `API_TOKEN`, `MCP_HTTP_BEARER_TOKEN`, or a per-repo `api_tokens` row scoped to `CODEORACLE_REPO_ID`.
 
 ```bash
-# In repo root .env:
-# CODEORACLE_REPO_ID=<uuid from `pnpm cli repo status`>
-# DATABASE_URL / REDIS_URL / QDRANT_URL as usual
-
+# stdio (Cursor / Claude Code local)
 pnpm mcp
+
+# HTTP (remote-capable)
+export CODEORACLE_MCP_TRANSPORT=http
+export MCP_HTTP_PORT=3100
+export API_TOKEN=dev-secret   # or MCP_HTTP_BEARER_TOKEN / scoped co_… token
+pnpm mcp:http
+# → POST/GET/DELETE http://127.0.0.1:3100/mcp
 ```
 
-Live smokes (tool handlers + retrieval, no MCP transport):
+Layout (architecture §10): `transport/stdio.ts` · `transport/http.ts` · shared `create-server.ts` / `bootstrap.ts`. Auth and rate-limit do **not** leak into tool handlers.
 
-```bash
-pnpm --filter @codeoracle/mcp-server exec tsx scripts/smoke-find-decision.ts "Feature Enhancement"
-pnpm --filter @codeoracle/mcp-server exec tsx scripts/smoke-search-codebase.ts "nasa weather"
-pnpm --filter @codeoracle/mcp-server exec tsx scripts/smoke-explain-file.ts "src/components/ClimateTrendsChart.tsx"
-```
-
-Logs go to **stderr** only — stdout is the MCP JSON-RPC stream.
-
-## Cursor config example
-
-Add to Cursor MCP settings (path adjusted to your clone):
+## Cursor config (stdio)
 
 ```json
 {
   "mcpServers": {
     "codeoracle": {
       "command": "pnpm",
-      "args": ["--dir", "/Users/YOU/AlinGod/CodeOracle", "mcp"],
+      "args": ["--dir", "/path/to/CodeOracle", "mcp"],
       "env": {
-        "CODEORACLE_REPO_ID": "9462ddb7-6064-4620-87c7-584566f643af"
+        "CODEORACLE_REPO_ID": "<uuid>"
       }
     }
   }
 }
 ```
 
-Or point `command` at `npx tsx apps/mcp-server/src/main.ts` with `cwd` set to the monorepo root so `.env` / `providers.yaml` resolve.
-
 ## Design rules
 
 - Tool handlers validate `@codeoracle/contracts` I/O (citations required).
 - Read path is deterministic: embed + Qdrant/Postgres only — no LLM rewrite.
 - Fail loud at startup if `CODEORACLE_REPO_ID`, DB, or Qdrant is missing/unreachable.
+- HTTP fails loud if no bearer mechanism is configured.

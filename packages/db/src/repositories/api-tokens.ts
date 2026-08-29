@@ -1,5 +1,5 @@
 import { randomBytes, createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "../client.js";
 import { apiTokens } from "../schema/api-tokens.js";
 
@@ -56,9 +56,9 @@ export async function revokeApiToken(
 ): Promise<boolean> {
   const deleted = await db
     .delete(apiTokens)
-    .where(eq(apiTokens.id, opts.tokenId))
-    .returning({ id: apiTokens.id, repoId: apiTokens.repoId });
-  return deleted.length > 0 && deleted[0]!.repoId === opts.repoId;
+    .where(and(eq(apiTokens.id, opts.tokenId), eq(apiTokens.repoId, opts.repoId)))
+    .returning({ id: apiTokens.id });
+  return deleted.length > 0;
 }
 
 /**

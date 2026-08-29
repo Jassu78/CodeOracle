@@ -16,10 +16,16 @@ import {
   revokeApiToken,
 } from "@codeoracle/db";
 import { createLogger } from "@codeoracle/observability";
-import { createQueue, createRedisConnection, bullJobId } from "@codeoracle/queue";
-import { isAuthorized, unauthorizedBody } from "./lib/auth.js";
+import { createQueue, createRedisConnection, bullJobId, checkRateLimit, clientKeyFromRequest } from "@codeoracle/queue";
+import {
+  authorizeAdmin,
+  authorizeForRepo,
+  forbiddenBody,
+  isOpenDevAuth,
+  resolveAuth,
+  unauthorizedBody,
+} from "./lib/auth.js";
 import { checkDeepHealth } from "./lib/health.js";
-import { checkRateLimit, clientKey } from "./lib/redis-rate-limit.js";
 import { parseRegisterRepoBody } from "./lib/schemas.js";
 import { handleGithubWebhook } from "./webhooks/handle-github-push.js";
 
@@ -115,12 +121,20 @@ async function main() {
         return;
       }
 
-      if (req.method !== "GET" && !(await isAuthorized(req, env, db))) {
+      const openDev = await isOpenDevAuth(env, db);
+      const principal = await resolveAuth(req, env, db);
+
+      // Every non-health, non-webhook route requires a principal unless open-dev.
+      if (!openDev && !principal) {
         sendJson(res, 401, unauthorizedBody());
         return;
       }
 
       if (req.method === "POST" && url.pathname === "/repos") {
+        if (!authorizeAdmin(principal, openDev)) {
+          sendJson(res, 403, forbiddenBody());
+          return;
+        }
         const parsed = parseRegisterRepoBody(await readJsonBody(req));
         if ("error" in parsed) {
           sendJson(res, 400, { error: parsed.error });
@@ -152,6 +166,10 @@ async function main() {
       const repoMatch = url.pathname.match(/^\/repos\/([0-9a-f-]{36})$/);
       if (req.method === "GET" && repoMatch) {
         const repoId = repoMatch[1]!;
+        if (!authorizeForRepo(principal, repoId, openDev)) {
+          sendJson(res, 403, forbiddenBody());
+          return;
+        }
         const row = await getRepoById(db, repoId);
         if (!row) {
           sendJson(res, 404, { error: "repo not found" });
@@ -163,12 +181,16 @@ async function main() {
 
       const indexMatch = url.pathname.match(/^\/repos\/([0-9a-f-]{36})\/index$/);
       if (req.method === "POST" && indexMatch) {
-        if (!(await checkRateLimit(redis, `index:${clientKey(req)}`, 10, 60_000))) {
+        const repoId = indexMatch[1]!;
+        if (!authorizeForRepo(principal, repoId, openDev)) {
+          sendJson(res, 403, forbiddenBody());
+          return;
+        }
+        if (!(await checkRateLimit(redis, `index:${clientKeyFromRequest(req)}`, 10, 60_000))) {
           sendJson(res, 429, { error: "rate limit exceeded — max 10 index requests per minute" });
           return;
         }
 
-        const repoId = indexMatch[1]!;
         const row = await getRepoById(db, repoId);
         if (!row) {
           sendJson(res, 404, { error: "repo not found" });
@@ -197,12 +219,18 @@ async function main() {
         return;
       }
 
-      // Per-repo bearer token lifecycle (see packages/db/src/repositories/api-tokens.ts).
-      // Scope note: any valid token authorizes admin routes above (not yet
-      // per-repo-restricted) — see README "Auth model" for the honest current state.
+      // Per-repo bearer token lifecycle — minting requires admin or open-dev
+      // (a repo token must not mint additional tokens for privilege escalation).
+      // List/revoke require authorizeForRepo (admin or that repo's token).
       const tokensMatch = url.pathname.match(/^\/repos\/([0-9a-f-]{36})\/tokens$/);
       if (req.method === "POST" && tokensMatch) {
         const repoId = tokensMatch[1]!;
+        if (!authorizeAdmin(principal, openDev)) {
+          sendJson(res, 403, {
+            error: "forbidden — only API_TOKEN (admin) or open-dev may mint repo tokens",
+          });
+          return;
+        }
         const row = await getRepoById(db, repoId);
         if (!row) {
           sendJson(res, 404, { error: "repo not found" });
@@ -216,6 +244,10 @@ async function main() {
 
       if (req.method === "GET" && tokensMatch) {
         const repoId = tokensMatch[1]!;
+        if (!authorizeForRepo(principal, repoId, openDev)) {
+          sendJson(res, 403, forbiddenBody());
+          return;
+        }
         const tokens = await listApiTokens(db, repoId);
         sendJson(res, 200, { tokens });
         return;
@@ -224,6 +256,10 @@ async function main() {
       const revokeMatch = url.pathname.match(/^\/repos\/([0-9a-f-]{36})\/tokens\/([0-9a-f-]{36})$/);
       if (req.method === "DELETE" && revokeMatch) {
         const [, repoId, tokenId] = revokeMatch as unknown as [string, string, string];
+        if (!authorizeForRepo(principal, repoId, openDev)) {
+          sendJson(res, 403, forbiddenBody());
+          return;
+        }
         const revoked = await revokeApiToken(db, { repoId, tokenId });
         if (!revoked) {
           sendJson(res, 404, { error: "token not found for this repo" });

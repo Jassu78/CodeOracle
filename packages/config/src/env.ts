@@ -25,7 +25,7 @@ export const EnvSchema = z.object({
   OLLAMA_API_KEY: z.string().optional(),
 
   /**
-   * Active repo for MCP stdio (single-repo MVP). Required by mcp-server startup;
+   * Active repo for MCP (single-repo MVP). Required by mcp-server startup;
    * optional for worker/cli so other apps keep loading without it.
    * Empty string from `.env` (KEY=) is treated as unset.
    */
@@ -34,7 +34,15 @@ export const EnvSchema = z.object({
     z.string().uuid().optional(),
   ),
 
+  /** stdio (default) | http — Streamable HTTP + bearer (D5.3). */
+  CODEORACLE_MCP_TRANSPORT: z.enum(["stdio", "http", "streamable-http", "sse"]).default("stdio"),
+
+  /** Dedicated MCP HTTP bearer (optional; API_TOKEN or scoped api_tokens also work). */
   MCP_HTTP_BEARER_TOKEN: z.string().optional(),
+  MCP_HTTP_PORT: z.coerce.number().int().positive().default(3100),
+  MCP_HTTP_HOST: z.string().default("127.0.0.1"),
+  /** Max authenticated MCP HTTP requests per client IP per minute. */
+  MCP_HTTP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
 
   API_PORT: z.coerce.number().int().positive().default(3000),
   API_TOKEN: z.string().optional(),
