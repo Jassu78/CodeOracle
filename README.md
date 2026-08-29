@@ -2,65 +2,116 @@
 
 **Self-hosted MCP server that searches your code and remembers why it's built that way — works with any model, stays fresh automatically.**
 
-Self-hosted. **₹0 for the default path** — no required paid API or service anywhere. Runs via Docker Compose on a developer laptop or a 12GB Ampere OCI Always Free instance.
+Self-hosted. **₹0 for the default path** — no required paid API. Postgres + Redis + Qdrant via Docker Compose; embeddings via local Ollama (or any OpenAI-compatible host).
 
-> **Status:** Stage 2 ingestion is on `main`. Stage 3 decision extraction is in progress (`extract_decisions` worker + gateway failover). MCP tools land in Stage 4.
+> **Status:** Stages 0–4 on `main`. Stage 5 ship hardening — MCP tools, scoped API auth, Streamable HTTP, golden eval in CI.
+
+## Time-to-first-query (≤ 10 minutes)
+
+Competent TypeScript developer, clean machine with **Node 20+**, **pnpm 9+**, **Docker**, and **git**.
+
+### 1. Clone and install (~1 min)
+
+```bash
+git clone https://github.com/Jassu78/CodeOracle.git
+cd CodeOracle
+corepack enable
+pnpm install
+```
+
+### 2. Start infra + migrate (~2 min)
+
+```bash
+cp .env.example .env
+cp providers.yaml.example providers.yaml
+
+cd infra/compose && docker compose up -d && cd ../..
+pnpm db:migrate
+```
+
+`.env` defaults match Compose (`DATABASE_URL` / `REDIS_URL` / `QDRANT_URL`). Change passwords only if you change Compose.
+
+### 3. Embeddings (~2–3 min first pull)
+
+Default `providers.yaml` enables **Ollama local embeddings** (`nomic-embed-text`). Install [Ollama](https://ollama.com), then:
+
+```bash
+ollama pull nomic-embed-text
+```
+
+For decision extraction (`find_decision`), enable one **chat** endpoint in `providers.yaml` and set its API key in `.env` (Gemini / Groq / OpenRouter free, or local Ollama chat). Search and `explain_file` work with embeddings alone.
+
+### 4. Index a repo (~2–4 min)
+
+```bash
+# Terminal A — keep running
+pnpm worker
+
+# Terminal B — register a local git repo (no GitHub PAT)
+pnpm cli -- repo register --local-path /absolute/path/to/your/repo
+# → prints a repo UUID
+
+pnpm cli -- repo index <repoId>
+pnpm cli -- repo status <repoId>   # wait until index_status=ready
+```
+
+GitHub instead: set `GITHUB_PAT` in `.env`, then `pnpm cli -- repo register --github OWNER/REPO --branch main`.
+
+Guided alternative: `pnpm cli -- init` (doctor → scaffold → register → queue index → print MCP config).
+
+### 5. Connect MCP (~1 min)
+
+```bash
+pnpm cli -- mcp-config <repoId>
+```
+
+Paste the JSON into Cursor **Settings → MCP** (or `.cursor/mcp.json`). Restart MCP if needed.
+
+Or set `CODEORACLE_REPO_ID=<repoId>` in `.env` and run `pnpm mcp` (stdio). HTTP: `pnpm mcp:http` (bearer required — see `apps/mcp-server/README.md`).
+
+### 6. Example queries
+
+In the editor MCP panel (or any MCP client):
+
+| Tool | Example |
+|------|---------|
+| `search_codebase` | `"where do we validate JWT"` |
+| `explain_file` | path: `"src/auth/middleware.ts"` |
+| `find_decision` | topic: `"why Redis for sessions"` |
+
+Every answer includes citations (file path / commit). Empty `find_decision` usually means extract has not run yet:
+
+```bash
+pnpm cli -- decisions extract <repoId>
+pnpm decisions:review <repoId>
+```
+
+---
 
 ## What this is
 
-CodeOracle indexes a GitHub repo (or local git mirror), chunks code with tree-sitter, embeds it for **hybrid** search (dense + sparse RRF after a full reindex; legacy dense fallback otherwise), extracts structured **Decision** objects from PR/commit history, and (Stage 4) exposes three citation-backed MCP tools: `search_codebase`, `explain_file`, and `find_decision`.
+Indexes a GitHub or local git repo, chunks with tree-sitter, hybrid search (dense + sparse RRF after full reindex), extracts **Decision** objects from history, and exposes three citation-backed MCP tools: `search_codebase`, `explain_file`, `find_decision`.
 
-Provider calls go through a universal OpenAI-compatible gateway (`providers.yaml`) with ordered failover — local Ollama, free cloud tiers, or paid APIs later, without code changes.
+Providers are **config-only** (`providers.yaml`) — any OpenAI-compatible `/v1` host. Failover on 429/5xx/network.
 
 ## Repo layout
 
 ```
-apps/        deliverables you run (api, worker, mcp-server, cli)
-packages/    capabilities you import (contracts, config, db, chunker, gateway, ...)
-infra/       Docker Compose + CI scripts
-test/        fixture repo + golden-query eval + e2e tests
+apps/        api, worker, mcp-server, cli
+packages/    contracts, config, db, chunker, gateway, retrieval, …
+infra/       Docker Compose + CI notes
+test/        sample-repo fixture + golden eval + e2e
 ```
 
-## Getting started (current scope)
+## Provider recipes
 
-```bash
-corepack enable
-pnpm install
-
-# environment check
-pnpm cli doctor
-
-# bring up Postgres + Redis + Qdrant (+ Ollama for local embeddings)
-cd infra/compose && docker compose up -d
-
-# generate + apply the database schema
-cp .env.example .env   # then fill in DATABASE_URL etc.
-cp providers.yaml.example providers.yaml
-pnpm db:generate
-pnpm db:migrate
-
-# prove the chunker works on a real file
-pnpm chunk packages/chunker/fixtures/sample.ts
-
-# register + index a repo (requires worker)
-pnpm worker   # separate terminal
-pnpm cli -- repo register --github OWNER/REPO --branch main
-pnpm cli -- repo index <repoId>
-pnpm decisions:review <repoId>
-```
-
-## Provider gateway (OpenAI-compatible)
-
-Every chat/embed call goes through `@codeoracle/gateway` → `OpenAiCompatAdapter`.
 **Adding a provider is a `providers.yaml` change — never a new SDK.**
 
 1. Copy `providers.yaml.example` → `providers.yaml` (gitignored).
-2. Set the matching env var in `.env` (`GEMINI_API_KEY`, `OPENROUTER_API_KEY`, …).
-3. Set `enabled: true` and a `priority` (lower = tried first).
-4. On **429 / 5xx / network** errors, the next enabled endpoint is tried.
-5. Provider-specific **4xx** (bad key / missing model) also skips to the next endpoint.
+2. Set the matching env var in `.env`.
+3. Set `enabled: true` and `priority` (lower = tried first).
 
-### Recipe A — all local (₹0, offline-capable)
+### Recipe A — all local (₹0, offline)
 
 ```yaml
 chat:
@@ -68,44 +119,8 @@ chat:
     kind: chat
     baseUrl: http://localhost:11434/v1
     apiKeyEnv: null
-    model: qwen2.5-coder:1.5b   # or any pulled Ollama chat model
-    priority: 1
-    enabled: true
-embeddings:
-  - id: ollama-embed-local
-    kind: embeddings
-    baseUrl: http://localhost:11434/v1
-    apiKeyEnv: null
-    model: nomic-embed-text
-    priority: 1
-    enabled: true
-```
-
-### Recipe B — local embed + free-cloud extract (recommended default)
-
-```yaml
-chat:
-  - id: gemini-free
-    kind: chat
-    baseUrl: https://generativelanguage.googleapis.com/v1beta/openai
-    apiKeyEnv: GEMINI_API_KEY
-    model: gemini-2.5-flash
-    priority: 1
-    enabled: true
-  - id: openrouter-free
-    kind: chat
-    baseUrl: https://openrouter.ai/api/v1
-    apiKeyEnv: OPENROUTER_API_KEY
-    model: openrouter/free          # Free Models Router (:free pool)
-    # or pin: google/gemma-4-26b-a4b-it:free
-    priority: 2
-    enabled: true
-  - id: ollama-local-fallback
-    kind: chat
-    baseUrl: http://localhost:11434/v1
-    apiKeyEnv: null
     model: qwen2.5-coder:1.5b
-    priority: 100
+    priority: 1
     enabled: true
 embeddings:
   - id: ollama-embed-local
@@ -117,7 +132,23 @@ embeddings:
     enabled: true
 ```
 
-Any other OpenAI-compatible host works the same way: set `baseUrl` to its `/v1` root, point `apiKeyEnv` at an `.env` key (or `null`), pick a `model` id, enable it.
+### Recipe B — local embed + free-cloud extract
+
+Enable `gemini-free` / `groq-free` / `openrouter-free` in the example file and set the corresponding `*_API_KEY`. Keep Ollama embeddings for ₹0 vector search.
+
+## Auth (API + MCP HTTP)
+
+| Principal | Use |
+|-----------|-----|
+| Open-dev | No `API_TOKEN` and no `api_tokens` rows — local API only |
+| `API_TOKEN` | Admin — any repo; mint tokens |
+| Per-repo `co_…` token | Scoped to one `repoId` only (cross-repo → 403) |
+
+MCP **HTTP** always requires a bearer (open-dev forbidden). Details: `apps/api/README.md`, `apps/mcp-server/README.md`.
+
+## CI
+
+PRs must pass lint, typecheck, unit, Compose smoke, integration e2e, and golden eval (`pnpm test:eval`). See `infra/ci/README.md`.
 
 ## License
 
