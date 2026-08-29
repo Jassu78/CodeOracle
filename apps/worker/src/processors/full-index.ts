@@ -38,6 +38,7 @@ export async function runFullIndexSetup(opts: {
     config: opts.providers,
     env: process.env,
     onUsage: logProviderUsage,
+    redis: opts.redis,
   });
   const started = Date.now();
   const jobHistoryId = await startJobHistory(db, {

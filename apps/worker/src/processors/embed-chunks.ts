@@ -26,6 +26,7 @@ export async function runEmbedChunks(opts: {
     config: opts.providers,
     env: process.env,
     onUsage: logProviderUsage,
+    redis: opts.redis,
   });
   const qdrant = createQdrantClient(opts.env.QDRANT_URL);
   const started = Date.now();
