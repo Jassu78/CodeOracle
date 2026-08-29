@@ -1,19 +1,57 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
+import { textToSparseVector, type SparseVector } from "../sparse-embed.js";
 
 export const CHUNKS_COLLECTION = "code_chunks";
+export const DENSE_VECTOR_NAME = "dense";
+export const SPARSE_VECTOR_NAME = "text";
+
+export type ChunksCollectionMode = "missing" | "legacy-dense" | "hybrid";
 
 export function createQdrantClient(url: string): QdrantClient {
   return new QdrantClient({ url, checkCompatibility: false });
 }
 
-export async function ensureChunksCollection(client: QdrantClient, vectorSize: number): Promise<void> {
+export async function getChunksCollectionMode(client: QdrantClient): Promise<ChunksCollectionMode> {
   const collections = await client.getCollections();
   const exists = collections.collections.some((c) => c.name === CHUNKS_COLLECTION);
-  if (exists) return;
+  if (!exists) return "missing";
+
+  const info = await client.getCollection(CHUNKS_COLLECTION);
+  const sparse = (info.config?.params as { sparse_vectors?: Record<string, unknown> } | undefined)
+    ?.sparse_vectors;
+  if (sparse && SPARSE_VECTOR_NAME in sparse) return "hybrid";
+  return "legacy-dense";
+}
+
+/**
+ * Create hybrid collection (named dense + sparse) when missing.
+ * Does not migrate legacy-dense in place — use `recreateHybridChunksCollection` on full index.
+ */
+export async function ensureChunksCollection(client: QdrantClient, vectorSize: number): Promise<void> {
+  const mode = await getChunksCollectionMode(client);
+  if (mode !== "missing") return;
 
   await client.createCollection(CHUNKS_COLLECTION, {
-    vectors: { size: vectorSize, distance: "Cosine" },
+    vectors: {
+      [DENSE_VECTOR_NAME]: { size: vectorSize, distance: "Cosine" },
+    },
+    sparse_vectors: {
+      [SPARSE_VECTOR_NAME]: { modifier: "idf" },
+    },
   });
+}
+
+/** Drop + recreate hybrid collection — call from full index after clearing Postgres chunks. */
+export async function recreateHybridChunksCollection(
+  client: QdrantClient,
+  vectorSize: number,
+): Promise<void> {
+  const collections = await client.getCollections();
+  const exists = collections.collections.some((c) => c.name === CHUNKS_COLLECTION);
+  if (exists) {
+    await client.deleteCollection(CHUNKS_COLLECTION);
+  }
+  await ensureChunksCollection(client, vectorSize);
 }
 
 export async function upsertChunkVectors(
@@ -21,6 +59,8 @@ export async function upsertChunkVectors(
   points: Array<{
     id: string;
     vector: number[];
+    /** Source text for sparse channel — required for hybrid collections. */
+    sparseText?: string;
     payload: Record<string, unknown>;
   }>,
 ): Promise<void> {
@@ -32,6 +72,27 @@ export async function upsertChunkVectors(
     }
   }
 
+  const mode = await getChunksCollectionMode(client);
+
+  if (mode === "hybrid") {
+    await client.upsert(CHUNKS_COLLECTION, {
+      wait: true,
+      points: points.map((p) => {
+        const sparse: SparseVector = textToSparseVector(p.sparseText ?? "");
+        return {
+          id: p.id,
+          vector: {
+            [DENSE_VECTOR_NAME]: p.vector,
+            [SPARSE_VECTOR_NAME]: sparse,
+          },
+          payload: p.payload,
+        };
+      }),
+    });
+    return;
+  }
+
+  // legacy-dense (or ensure was never called): unnamed dense vector
   await client.upsert(CHUNKS_COLLECTION, {
     wait: true,
     points: points.map((p) => ({ id: p.id, vector: p.vector, payload: p.payload })),
@@ -49,5 +110,90 @@ export async function deleteRepoChunkVectors(client: QdrantClient, repoId: strin
     filter: {
       must: [{ key: "repo_id", match: { value: repoId } }],
     },
+  });
+}
+
+/**
+ * Code chunk search — hybrid dense+sparse RRF when collection supports it;
+ * dense-only fallback for legacy collections.
+ */
+export async function searchSimilarChunks(
+  client: QdrantClient,
+  opts: {
+    repoId: string;
+    vector: number[];
+    /** Required for sparse channel / hybrid RRF. */
+    queryText?: string;
+    limit?: number;
+    scoreThreshold?: number;
+  },
+): Promise<Array<{ id: string; score: number }>> {
+  const limit = opts.limit ?? 10;
+  const filter = {
+    must: [{ key: "repo_id", match: { value: opts.repoId } }],
+  };
+  const mode = await getChunksCollectionMode(client);
+
+  if (mode === "hybrid" && opts.queryText?.trim()) {
+    const sparse = textToSparseVector(opts.queryText);
+    const prefetchLimit = Math.max(limit * 2, 20);
+    const response = await client.query(CHUNKS_COLLECTION, {
+      prefetch: [
+        {
+          query: opts.vector,
+          using: DENSE_VECTOR_NAME,
+          limit: prefetchLimit,
+          filter,
+        },
+        {
+          query: sparse,
+          using: SPARSE_VECTOR_NAME,
+          limit: prefetchLimit,
+          filter,
+        },
+      ],
+      query: { fusion: "rrf" },
+      limit,
+      filter,
+    });
+
+    return response.points.map((r: { id: string | number; score?: number }) => ({
+      id: String(r.id),
+      score: r.score ?? 0,
+    }));
+  }
+
+  const denseQuery =
+    mode === "hybrid"
+      ? { query: opts.vector, using: DENSE_VECTOR_NAME }
+      : { query: opts.vector };
+
+  const response = await client.query(CHUNKS_COLLECTION, {
+    ...denseQuery,
+    limit,
+    score_threshold: opts.scoreThreshold ?? 0.35,
+    filter,
+  });
+
+  return response.points.map((r: { id: string | number; score: number }) => ({
+    id: String(r.id),
+    score: r.score,
+  }));
+}
+
+/** Delete specific chunk vectors by point id (incremental reindex). */
+export async function deleteChunkVectorsByIds(
+  client: QdrantClient,
+  pointIds: string[],
+): Promise<void> {
+  if (pointIds.length === 0) return;
+
+  const collections = await client.getCollections();
+  const exists = collections.collections.some((c) => c.name === CHUNKS_COLLECTION);
+  if (!exists) return;
+
+  await client.delete(CHUNKS_COLLECTION, {
+    wait: true,
+    points: pointIds,
   });
 }

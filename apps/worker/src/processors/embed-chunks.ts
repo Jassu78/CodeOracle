@@ -73,6 +73,7 @@ export async function runEmbedChunks(opts: {
         batch.map((row, idx) => ({
           id: row.id,
           vector: embedResult.vectors[idx]!,
+          sparseText: row.content,
           payload: {
             repo_id: opts.payload.repoId,
             file_path: row.filePath,

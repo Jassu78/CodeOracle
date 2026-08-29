@@ -1,5 +1,14 @@
 # @codeoracle/retrieval
 
-**Status:** Stub.
+Vector store helpers + tool-facing retrieval services.
 
-Hybrid (dense + sparse/RRF) retrieval over Qdrant + Postgres is not built yet. Requires `@codeoracle/chunker` and `@codeoracle/gateway` (embeddings). Internal split: `src/hybrid` (ranking) vs `src/store` (Qdrant client).
+## Search modes
+
+| Collection | Mode |
+|---|---|
+| `code_chunks` | **Hybrid** when created via `recreateHybridChunksCollection` / `ensureChunksCollection` (named `dense` + sparse `text`, RRF). Legacy unnamed dense still searchable (dense-only fallback). |
+| `decisions` | Dense only |
+
+Sparse vectors are local bag-of-tokens (`textToSparseVector`); Qdrant applies `idf` modifier.
+
+**Activate hybrid on an existing dogfood index:** run a **full** reindex (recreates the chunks collection). Incremental upserts write sparse when the collection is already hybrid.

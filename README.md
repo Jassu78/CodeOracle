@@ -8,7 +8,7 @@ Self-hosted. **₹0 for the default path** — no required paid API or service a
 
 ## What this is
 
-CodeOracle indexes a GitHub repo (or local git mirror), chunks code with tree-sitter, embeds it for hybrid search, extracts structured **Decision** objects from PR/commit history, and (Stage 4) exposes three citation-backed MCP tools: `search_codebase`, `explain_file`, and `find_decision`.
+CodeOracle indexes a GitHub repo (or local git mirror), chunks code with tree-sitter, embeds it for **hybrid** search (dense + sparse RRF after a full reindex; legacy dense fallback otherwise), extracts structured **Decision** objects from PR/commit history, and (Stage 4) exposes three citation-backed MCP tools: `search_codebase`, `explain_file`, and `find_decision`.
 
 Provider calls go through a universal OpenAI-compatible gateway (`providers.yaml`) with ordered failover — local Ollama, free cloud tiers, or paid APIs later, without code changes.
 

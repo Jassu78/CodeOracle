@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { DecisionExtractionResult } from "@codeoracle/contracts";
 import type { Database } from "../client.js";
 import { decisions } from "../schema/decisions.js";
@@ -29,6 +29,35 @@ export async function getDecisionsByIds(
 ): Promise<DecisionRow[]> {
   if (ids.length === 0) return [];
   return db.select().from(decisions).where(inArray(decisions.id, ids));
+}
+
+/**
+ * Decisions whose `touched_paths` exactly match `filePath` or are a directory
+ * prefix of it (e.g. touched `apps/api` matches `apps/api/src/main.ts`).
+ */
+export async function listDecisionsTouchingPath(
+  db: Database,
+  repoId: string,
+  filePath: string,
+): Promise<DecisionRow[]> {
+  const path = filePath.trim();
+  if (!path) return [];
+
+  return db
+    .select()
+    .from(decisions)
+    .where(
+      and(
+        eq(decisions.repoId, repoId),
+        sql`EXISTS (
+          SELECT 1
+          FROM unnest(${decisions.touchedPaths}) AS tp
+          WHERE tp = ${path}
+             OR ${path} LIKE (tp || '/%')
+        )`,
+      ),
+    )
+    .orderBy(desc(decisions.decidedAt));
 }
 
 export async function markDecisionSuperseded(

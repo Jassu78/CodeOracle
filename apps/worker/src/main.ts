@@ -7,6 +7,7 @@ import {
   type EmbedChunksJobPayload,
   type ExtractDecisionsJobPayload,
   type FullIndexJobPayload,
+  type IncrementalReindexJobPayload,
 } from "@codeoracle/contracts";
 import { createDb, pruneJobHistory } from "@codeoracle/db";
 import { createQueue, createRedisConnection, createWorker } from "@codeoracle/queue";
@@ -20,6 +21,7 @@ import { runChunkFile } from "./processors/chunk-file.js";
 import { runEmbedChunks } from "./processors/embed-chunks.js";
 import { runExtractDecisions } from "./processors/extract-decisions.js";
 import { markRepoIndexError, runFullIndexSetup } from "./processors/full-index.js";
+import { runIncrementalReindex } from "./processors/incremental-reindex.js";
 
 const projectRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 const log = createLogger("worker");
@@ -87,6 +89,18 @@ async function main() {
             payload,
           });
           log.info("extract_decisions complete", { repoId: payload.repoId, ...result });
+          return result;
+        }
+        case JOB_NAMES.INCREMENTAL_REINDEX: {
+          const payload = job.data as IncrementalReindexJobPayload;
+          const result = await runIncrementalReindex({
+            env,
+            redis: connection,
+            queue,
+            db,
+            payload,
+          });
+          log.info("incremental_reindex complete", { repoId: payload.repoId, ...result });
           return result;
         }
         default:

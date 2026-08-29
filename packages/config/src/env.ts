@@ -22,6 +22,17 @@ export const EnvSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
+  OLLAMA_API_KEY: z.string().optional(),
+
+  /**
+   * Active repo for MCP stdio (single-repo MVP). Required by mcp-server startup;
+   * optional for worker/cli so other apps keep loading without it.
+   * Empty string from `.env` (KEY=) is treated as unset.
+   */
+  CODEORACLE_REPO_ID: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().uuid().optional(),
+  ),
 
   MCP_HTTP_BEARER_TOKEN: z.string().optional(),
 

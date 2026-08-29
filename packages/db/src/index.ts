@@ -5,4 +5,5 @@ export * from "./repositories/clear-index";
 export * from "./repositories/job-history";
 export * from "./repositories/prune-job-history";
 export * from "./repositories/chunk-embedding-status";
+export * from "./repositories/chunks";
 export * from "./repositories/decisions";

@@ -4,6 +4,7 @@ import { JOB_NAMES } from "@codeoracle/contracts";
 import { githubSources, type Database } from "@codeoracle/db";
 import { isTrivialSourceMessage } from "@codeoracle/extraction";
 import { bullJobId } from "@codeoracle/queue";
+import { safeReplaceJob } from "./safe-replace-job.js";
 
 export type GithubSourceRow = {
   id: string;
@@ -122,29 +123,53 @@ export async function queueExtractDecisionsForRepo(opts: {
 
   let queued = 0;
   for (const source of selected) {
-    // Remove prior job with same id so re-extract actually runs (BullMQ jobId is idempotent).
     const jobId = bullJobId("extract_decisions", opts.repoId, source.id);
-    const existing = await opts.queue.getJob(jobId);
-    if (existing) {
-      await existing.remove();
-    }
-
-    await opts.queue.add(
-      JOB_NAMES.EXTRACT_DECISIONS,
-      {
+    const result = await safeReplaceJob({
+      queue: opts.queue,
+      name: JOB_NAMES.EXTRACT_DECISIONS,
+      jobId,
+      data: {
         repoId: opts.repoId,
         githubSourceId: source.id,
       },
-      {
-        jobId,
+      jobOpts: {
         removeOnComplete: 1000,
         removeOnFail: 5000,
         attempts: 3,
         backoff: { type: "exponential", delay: 5000 },
       },
-    );
-    queued += 1;
+    });
+    if (result !== "skipped_active") queued += 1;
   }
 
   return { queued, skippedTrivial, skippedCommitCoveredByPr };
+}
+
+/** Queue extract jobs for explicit github_sources ids (G4.10 merged-PR path). */
+export async function queueExtractDecisionsForSourceIds(opts: {
+  queue: Queue;
+  repoId: string;
+  githubSourceIds: string[];
+}): Promise<{ queued: number }> {
+  let queued = 0;
+  for (const githubSourceId of opts.githubSourceIds) {
+    const jobId = bullJobId("extract_decisions", opts.repoId, githubSourceId);
+    const result = await safeReplaceJob({
+      queue: opts.queue,
+      name: JOB_NAMES.EXTRACT_DECISIONS,
+      jobId,
+      data: {
+        repoId: opts.repoId,
+        githubSourceId,
+      },
+      jobOpts: {
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+        attempts: 3,
+        backoff: { type: "exponential", delay: 5000 },
+      },
+    });
+    if (result !== "skipped_active") queued += 1;
+  }
+  return { queued };
 }

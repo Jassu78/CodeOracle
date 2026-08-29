@@ -7,12 +7,22 @@ chat:
   # endpoint by priority is tried. Provider-specific 4xx (bad key/model) also skips
   # to the next endpoint — it does not retry the same endpoint.
 
+  # Ollama Cloud Free — strong extract quality without Gemini/OpenRouter burn.
+  # Create a key at https://ollama.com/settings/keys. Prefer usage level 1–2 models.
+  - id: ollama-cloud
+    kind: chat
+    baseUrl: https://ollama.com/v1
+    apiKeyEnv: OLLAMA_API_KEY
+    model: gpt-oss:20b-cloud
+    priority: 1
+    enabled: false # enable once OLLAMA_API_KEY is set
+
   - id: gemini-free
     kind: chat
     baseUrl: https://generativelanguage.googleapis.com/v1beta/openai
     apiKeyEnv: GEMINI_API_KEY
     model: gemini-2.5-flash
-    priority: 1
+    priority: 10
     enabled: false # enable once GEMINI_API_KEY is set
 
   - id: groq-free
@@ -20,7 +30,7 @@ chat:
     baseUrl: https://api.groq.com/openai/v1
     apiKeyEnv: GROQ_API_KEY
     model: llama-3.3-70b-versatile
-    priority: 2
+    priority: 15
     enabled: false # enable once GROQ_API_KEY is set
 
   - id: openrouter-free
@@ -30,7 +40,7 @@ chat:
     # Free Models Router — picks an available `:free` model at request time.
     # Or pin a specific free slug, e.g. google/gemma-4-26b-a4b-it:free
     model: openrouter/free
-    priority: 2
+    priority: 20
     enabled: false # enable once OPENROUTER_API_KEY is set
 
   - id: ollama-local-fallback
