@@ -15,6 +15,7 @@ export const GoldenSearchExpectationSchema = z.object({
   /** K for hit@K — PRD gate uses 3. */
   hitAt: z.number().int().positive().max(50).default(3),
 });
+export type GoldenSearchExpectation = z.infer<typeof GoldenSearchExpectationSchema>;
 
 export const GoldenFindDecisionExpectationSchema = z.object({
   /** Substring(s) that must appear in returned decision topic or summary (case-insensitive). */
@@ -25,6 +26,7 @@ export const GoldenFindDecisionExpectationSchema = z.object({
    */
   sourceUrlIncludes: z.array(z.string().min(1)).default(["/commit/"]),
 });
+export type GoldenFindDecisionExpectation = z.infer<typeof GoldenFindDecisionExpectationSchema>;
 
 export const GoldenExplainFileExpectationSchema = z.object({
   /** Path passed to explain_file — must match a file in the fixture. */
@@ -32,6 +34,7 @@ export const GoldenExplainFileExpectationSchema = z.object({
   /** At least one chunk summary or related decision must be non-empty when indexed. */
   requireNonEmpty: z.boolean().default(true),
 });
+export type GoldenExplainFileExpectation = z.infer<typeof GoldenExplainFileExpectationSchema>;
 
 export const GoldenQuerySchema = z.discriminatedUnion("tool", [
   z.object({

@@ -17,6 +17,7 @@
     "test": "turbo run test",
     "test:integration": "INTEGRATION_TEST=1 vitest run --config test/e2e/vitest.config.ts",
     "test:golden": "vitest run --config test/golden-queries/vitest.config.ts",
+    "test:eval": "INTEGRATION_TEST=1 vitest run --config test/golden-queries/eval.vitest.config.ts",
     "typecheck:e2e": "tsc -p test/e2e/tsconfig.json",
     "typecheck:golden": "tsc -p test/golden-queries/tsconfig.json",
     "fixture:sample-repo:tree": "pnpm --filter @codeoracle/worker exec tsx ../../test/fixtures/sample-repo/write-tree-cli.ts",
@@ -34,6 +35,7 @@
   "devDependencies": {
     "@codeoracle/config": "workspace:*",
     "@codeoracle/contracts": "workspace:*",
+    "@codeoracle/core-domain": "workspace:*",
     "@codeoracle/db": "workspace:*",
     "@codeoracle/gateway": "workspace:*",
     "@codeoracle/queue": "workspace:*",

@@ -14,6 +14,9 @@ importers:
       '@codeoracle/contracts':
         specifier: workspace:*
         version: link:packages/contracts
+      '@codeoracle/core-domain':
+        specifier: workspace:*
+        version: link:packages/core-domain
       '@codeoracle/db':
         specifier: workspace:*
         version: link:packages/db

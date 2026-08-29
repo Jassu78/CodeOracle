@@ -136,6 +136,13 @@ jobs:
           REDIS_URL: redis://localhost:6379
           QDRANT_URL: http://localhost:6333
 
+      - name: Golden-query eval (D5.2 — hit@3 ≥80%, citation 100%)
+        run: pnpm test:eval
+        env:
+          DATABASE_URL: postgresql://codeoracle:change-me-in-dev@localhost:5432/codeoracle
+          REDIS_URL: redis://localhost:6379
+          QDRANT_URL: http://localhost:6333
+
       - name: Tear down
         if: always()
         working-directory: infra/compose

@@ -6,6 +6,7 @@ export default defineConfig({
       "test/golden-queries/**/*.test.ts",
       "test/fixtures/sample-repo/**/*.test.ts",
     ],
+    exclude: ["test/golden-queries/**/*.integration.test.ts"],
     testTimeout: 30_000,
   },
 });

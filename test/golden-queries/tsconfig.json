@@ -4,5 +4,9 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["**/*.ts", "../fixtures/sample-repo/**/*.ts"]
+  "include": [
+    "**/*.ts",
+    "../fixtures/sample-repo/**/*.ts",
+    "../e2e/fixtures/fake-provider-server.ts"
+  ]
 }
