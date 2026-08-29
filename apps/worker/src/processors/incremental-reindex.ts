@@ -77,7 +77,7 @@ export async function runIncrementalReindex(opts: {
   const prior = await findJobHistoryByKey(opts.db, {
     repoId,
     jobType: JOB_NAMES.INCREMENTAL_REINDEX,
-    afterSha,
+    dedupeKey: afterSha,
   });
   if (prior?.status === "done") {
     return {
@@ -117,7 +117,7 @@ export async function runIncrementalReindex(opts: {
   const jobHistoryId = await startJobHistory(opts.db, {
     repoId,
     jobType: JOB_NAMES.INCREMENTAL_REINDEX,
-    afterSha,
+    dedupeKey: afterSha,
   });
 
   const qdrant = createQdrantClient(opts.env.QDRANT_URL);

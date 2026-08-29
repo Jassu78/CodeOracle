@@ -5,7 +5,7 @@ import { jobHistory } from "../schema/job-history.js";
 
 export async function findJobHistoryByKey(
   db: Database,
-  opts: { repoId: string; jobType: string; afterSha: string },
+  opts: { repoId: string; jobType: string; dedupeKey: string },
 ): Promise<{ id: string; status: string } | null> {
   const [row] = await db
     .select({ id: jobHistory.id, status: jobHistory.status })
@@ -14,7 +14,7 @@ export async function findJobHistoryByKey(
       and(
         eq(jobHistory.repoId, opts.repoId),
         eq(jobHistory.jobType, opts.jobType),
-        eq(jobHistory.afterSha, opts.afterSha),
+        eq(jobHistory.dedupeKey, opts.dedupeKey),
       ),
     )
     .limit(1);
@@ -26,14 +26,14 @@ export async function startJobHistory(
   opts: {
     repoId: string;
     jobType: string;
-    afterSha?: string | null;
+    dedupeKey?: string | null;
   },
 ): Promise<string> {
-  const afterSha = opts.afterSha ?? null;
+  const dedupeKey = opts.dedupeKey ?? null;
 
   // Retries (429 → failover → BullMQ re-attempt) must reuse the same idempotency
   // key instead of dying on job_history_idempotency_unique.
-  if (afterSha) {
+  if (dedupeKey) {
     const existing = await db
       .select({ id: jobHistory.id })
       .from(jobHistory)
@@ -41,7 +41,7 @@ export async function startJobHistory(
         and(
           eq(jobHistory.repoId, opts.repoId),
           eq(jobHistory.jobType, opts.jobType),
-          eq(jobHistory.afterSha, afterSha),
+          eq(jobHistory.dedupeKey, dedupeKey),
         ),
       )
       .limit(1);
@@ -61,13 +61,13 @@ export async function startJobHistory(
       id,
       repoId: opts.repoId,
       jobType: opts.jobType,
-      afterSha,
+      dedupeKey,
       status: "running",
     });
     return id;
   } catch (err) {
     // Race: another worker inserted the same idempotency key first.
-    if (afterSha) {
+    if (dedupeKey) {
       const [row] = await db
         .select({ id: jobHistory.id })
         .from(jobHistory)
@@ -75,7 +75,7 @@ export async function startJobHistory(
           and(
             eq(jobHistory.repoId, opts.repoId),
             eq(jobHistory.jobType, opts.jobType),
-            eq(jobHistory.afterSha, afterSha),
+            eq(jobHistory.dedupeKey, dedupeKey),
           ),
         )
         .limit(1);

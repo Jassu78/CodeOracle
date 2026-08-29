@@ -2,7 +2,7 @@
   "name": "@codeoracle/cli",
   "version": "0.0.0",
   "private": true,
-  "description": "CodeOracle TUI bootstrap + ops CLI. `codeoracle doctor` (this stage) checks the local environment; `init`/`status`/`mcp-config` land in later stages.",
+  "description": "CodeOracle TUI bootstrap + ops CLI: doctor, init, status, mcp-config, repo, decisions.",
   "type": "module",
   "bin": {
     "codeoracle": "./dist/main.js"

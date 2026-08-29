@@ -2,6 +2,17 @@
  * Local sparse encoder for hybrid search (BM25-style bag-of-tokens).
  * Stable FNV-1a → index; values = raw term frequency.
  * Qdrant `modifier: idf` applies IDF at query time when configured.
+ *
+ * Accepted trade-off — hash collisions: two distinct tokens landing on the
+ * same 31-bit index silently merge their term frequencies (this is the
+ * standard "hashing trick" used by e.g. scikit-learn's HashingVectorizer,
+ * not a bug unique to this code). Collision probability for two arbitrary
+ * tokens is ~1/2^31 (birthday-bound: for a corpus of N distinct tokens,
+ * expected collisions ≈ N²/2^32). At single-repo MVP scale (a few thousand
+ * distinct identifiers/words per repo), this is negligible — it would only
+ * become worth revisiting (e.g. widen to 61-bit indices split across two
+ * hashes, or move to a real sparse model) if/when this runs across many
+ * large repos sharing one collection with a much bigger combined vocabulary.
  */
 export type SparseVector = {
   indices: number[];
@@ -22,6 +33,7 @@ function fnv1a(token: string): number {
     hash = Math.imul(hash, 0x01000193);
   }
   // Qdrant sparse indices are non-negative u32-ish; keep positive 31-bit.
+  // (See module doc comment above for the accepted collision trade-off.)
   return hash >>> 0;
 }
 

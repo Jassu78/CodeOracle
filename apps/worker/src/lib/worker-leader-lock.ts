@@ -9,7 +9,7 @@ export type WorkerLeaderLock = {
    * True if this process holds the leader marker. Advisory only — no code
    * path gates correctness on it. Multi-worker safety now comes from:
    *   - Redis-backed circuit breaker (provider 429 cool-downs are shared)
-   *   - job_history unique (repo_id, job_type, after_sha) + BullMQ jobId
+   *   - job_history unique (repo_id, job_type, dedupe_key) + BullMQ jobId
    *     (duplicate work is a DB/queue-level no-op, not a mutex problem)
    *   - BullMQ's own per-job lock (two workers never run the same job)
    */

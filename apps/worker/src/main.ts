@@ -71,7 +71,7 @@ async function main() {
             db,
             repoId: payload.repoId,
           });
-          log.info("full_index setup complete", { repoId: payload.repoId, ...result });
+          log.info("full_index setup complete", { jobId: job.id, repoId: payload.repoId, ...result });
           return result;
         }
         case JOB_NAMES.CHUNK_FILE: {
@@ -91,7 +91,7 @@ async function main() {
             db,
             payload,
           });
-          log.info("extract_decisions complete", { repoId: payload.repoId, ...result });
+          log.info("extract_decisions complete", { jobId: job.id, repoId: payload.repoId, ...result });
           return result;
         }
         case JOB_NAMES.INCREMENTAL_REINDEX: {
@@ -103,7 +103,7 @@ async function main() {
             db,
             payload,
           });
-          log.info("incremental_reindex complete", { repoId: payload.repoId, ...result });
+          log.info("incremental_reindex complete", { jobId: job.id, repoId: payload.repoId, ...result });
           return result;
         }
         default:
@@ -114,7 +114,7 @@ async function main() {
   );
 
   worker.on("failed", async (job, err) => {
-    log.error("Job failed", { jobName: job?.name, err: (err as Error).message });
+    log.error("Job failed", { jobId: job?.id, jobName: job?.name, err: (err as Error).message });
     await handleIndexJobFailure({ env, redis: connection, db, queue, job, err: err as Error });
 
     const repoId = (job?.data as { repoId?: string } | undefined)?.repoId;

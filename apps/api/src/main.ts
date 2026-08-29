@@ -176,6 +176,7 @@ async function main() {
         }
 
         const indexRunId = randomUUID();
+        const fullIndexJobId = bullJobId("full_index", repoId, indexRunId);
         await queue.add(
           JOB_NAMES.FULL_INDEX,
           {
@@ -184,15 +185,15 @@ async function main() {
             branch: row.defaultBranch,
           },
           {
-            jobId: bullJobId("full_index", repoId, indexRunId),
+            jobId: fullIndexJobId,
             removeOnComplete: 100,
             removeOnFail: 500,
             attempts: 3,
             backoff: { type: "exponential", delay: 5000 },
           },
         );
-        log.info("Queued full_index", { repoId });
-        sendJson(res, 202, { queued: true, job: JOB_NAMES.FULL_INDEX });
+        log.info("Queued full_index", { repoId, jobId: fullIndexJobId });
+        sendJson(res, 202, { queued: true, job: JOB_NAMES.FULL_INDEX, jobId: fullIndexJobId });
         return;
       }
 

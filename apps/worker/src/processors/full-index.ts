@@ -44,7 +44,7 @@ export async function runFullIndexSetup(opts: {
   const jobHistoryId = await startJobHistory(db, {
     repoId: opts.repoId,
     jobType: JOB_NAMES.FULL_INDEX,
-    afterSha: `full-index:${Date.now()}`,
+    dedupeKey: `full-index:${Date.now()}`,
   });
 
   const [repo] = await db.select().from(repos).where(eq(repos.id, opts.repoId)).limit(1);
