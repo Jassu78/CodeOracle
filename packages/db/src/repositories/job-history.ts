@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Database } from "../client.js";
 import { jobHistory } from "../schema/job-history.js";
 
@@ -49,7 +49,7 @@ export async function startJobHistory(
     if (existing[0]) {
       await db
         .update(jobHistory)
-        .set({ status: "running", latencyMs: 0, tokensUsed: 0 })
+        .set({ status: "running", latencyMs: 0, tokensUsed: 0, errorMessage: null })
         .where(eq(jobHistory.id, existing[0].id));
       return existing[0].id;
     }
@@ -82,7 +82,7 @@ export async function startJobHistory(
       if (row) {
         await db
           .update(jobHistory)
-          .set({ status: "running", latencyMs: 0, tokensUsed: 0 })
+          .set({ status: "running", latencyMs: 0, tokensUsed: 0, errorMessage: null })
           .where(eq(jobHistory.id, row.id));
         return row.id;
       }
@@ -98,6 +98,7 @@ export async function finishJobHistory(
     status: "done" | "error";
     latencyMs: number;
     tokensUsed?: number;
+    errorMessage?: string | null;
   },
 ): Promise<void> {
   await db
@@ -106,6 +107,43 @@ export async function finishJobHistory(
       status: opts.status,
       latencyMs: opts.latencyMs,
       tokensUsed: opts.tokensUsed ?? 0,
+      errorMessage: opts.status === "error" ? (opts.errorMessage ?? null) : null,
     })
     .where(eq(jobHistory.id, jobHistoryId));
+}
+
+export type FailedExtractJob = {
+  id: string;
+  dedupeKey: string | null;
+  errorMessage: string | null;
+  latencyMs: number;
+  tokensUsed: number;
+  createdAt: Date;
+};
+
+/** Recent failed extract_decisions rows for a repo (G3.21). */
+export async function listFailedExtractJobs(
+  db: Database,
+  repoId: string,
+  limit = 50,
+): Promise<FailedExtractJob[]> {
+  return db
+    .select({
+      id: jobHistory.id,
+      dedupeKey: jobHistory.dedupeKey,
+      errorMessage: jobHistory.errorMessage,
+      latencyMs: jobHistory.latencyMs,
+      tokensUsed: jobHistory.tokensUsed,
+      createdAt: jobHistory.createdAt,
+    })
+    .from(jobHistory)
+    .where(
+      and(
+        eq(jobHistory.repoId, repoId),
+        eq(jobHistory.jobType, "extract_decisions"),
+        eq(jobHistory.status, "error"),
+      ),
+    )
+    .orderBy(desc(jobHistory.createdAt))
+    .limit(limit);
 }

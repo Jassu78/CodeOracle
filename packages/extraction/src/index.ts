@@ -7,8 +7,11 @@ export {
 export {
   parseExtractionBatch,
   stripMarkdownFence,
+  extractJsonSubstring,
+  coerceExtractionPayload,
   filterByConfidence,
   ExtractionParseError,
+  EXTRACTION_REPAIR_SYSTEM,
 } from "./parse-extraction.js";
 export {
   extractDecisionsFromSource,

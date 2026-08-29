@@ -21,8 +21,89 @@ export function stripMarkdownFence(raw: string): string {
   return fenceMatch ? fenceMatch[1]!.trim() : trimmed;
 }
 
+/**
+ * Pull the first JSON object or array substring from noisy model output
+ * (trailing prose, "Here is the JSON:" prefixes).
+ */
+export function extractJsonSubstring(raw: string): string {
+  const text = stripMarkdownFence(raw);
+  const objStart = text.indexOf("{");
+  const arrStart = text.indexOf("[");
+  let start = -1;
+  if (objStart >= 0 && (arrStart < 0 || objStart < arrStart)) start = objStart;
+  else if (arrStart >= 0) start = arrStart;
+  if (start < 0) return text;
+
+  const open = text[start]!;
+  const close = open === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inString) {
+      if (escape) escape = false;
+      else if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return text.slice(start);
+}
+
+function coerceConfidence(value: unknown): unknown {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return value;
+}
+
+function coerceDecision(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+  const d = raw as Record<string, unknown>;
+  return {
+    ...d,
+    alternativesConsidered: Array.isArray(d.alternativesConsidered)
+      ? d.alternativesConsidered
+      : [],
+    touchedPaths: Array.isArray(d.touchedPaths) ? d.touchedPaths : [],
+    confidence: coerceConfidence(d.confidence),
+  };
+}
+
+/**
+ * Normalize common free/local-model shapes before Zod validation (G3.20).
+ */
+export function coerceExtractionPayload(parsed: unknown): unknown {
+  if (Array.isArray(parsed)) {
+    return { decisions: parsed.map(coerceDecision) };
+  }
+  if (parsed && typeof parsed === "object") {
+    const obj = parsed as Record<string, unknown>;
+    if (Array.isArray(obj.decisions)) {
+      return { decisions: obj.decisions.map(coerceDecision) };
+    }
+    // Single decision object root
+    if (typeof obj.topic === "string" && typeof obj.summary === "string") {
+      return { decisions: [coerceDecision(obj)] };
+    }
+  }
+  return parsed;
+}
+
 export function parseExtractionBatch(raw: string): DecisionExtractionBatch {
-  const jsonText = stripMarkdownFence(raw);
+  const jsonText = extractJsonSubstring(raw);
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonText);
@@ -30,10 +111,7 @@ export function parseExtractionBatch(raw: string): DecisionExtractionBatch {
     throw new ExtractionParseError("LLM output is not valid JSON", err);
   }
 
-  // Small models sometimes emit a bare decisions array instead of { decisions: [...] }.
-  if (Array.isArray(parsed)) {
-    parsed = { decisions: parsed };
-  }
+  parsed = coerceExtractionPayload(parsed);
 
   const result = DecisionExtractionBatchSchema.safeParse(parsed);
   if (!result.success) {
@@ -53,3 +131,8 @@ export function filterByConfidence(
 ): DecisionExtractionResult[] {
   return batch.decisions.filter((d) => d.confidence >= minConfidence);
 }
+
+export const EXTRACTION_REPAIR_SYSTEM = `You fix invalid JSON from a previous extraction attempt.
+Return ONLY valid JSON matching:
+{"decisions":[{"topic":"string","summary":"string","alternativesConsidered":["string"],"confidence":0.0,"touchedPaths":["string"]}]}
+No markdown fences. No commentary. Prefer {"decisions":[]} over inventing fields.`;

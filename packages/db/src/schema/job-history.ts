@@ -27,6 +27,8 @@ export const jobHistory = pgTable(
     status: text("status").notNull().default("queued"), // queued | running | done | error
     tokensUsed: integer("tokens_used").notNull().default(0),
     latencyMs: integer("latency_ms").notNull().default(0),
+    /** Last error message for failed jobs (G3.21 extract DLQ visibility). */
+    errorMessage: text("error_message"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

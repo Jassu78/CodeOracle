@@ -2,8 +2,16 @@ import type { QdrantClient } from "@qdrant/js-client-rest";
 
 export const DECISIONS_COLLECTION = "decisions";
 
-export function decisionEmbedText(topic: string, summary: string): string {
-  return `${topic.trim()}\n\n${summary.trim()}`;
+export function decisionEmbedText(
+  topic: string,
+  summary: string,
+  alternativesConsidered: string[] = [],
+): string {
+  const alts =
+    alternativesConsidered.length > 0
+      ? `\n\nAlternatives considered: ${alternativesConsidered.join("; ")}`
+      : "";
+  return `${topic.trim()}\n\n${summary.trim()}${alts}`;
 }
 
 export async function ensureDecisionsCollection(
