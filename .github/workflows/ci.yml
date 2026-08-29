@@ -34,13 +34,16 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Typecheck integration test fixtures
+        run: pnpm typecheck:e2e
+
       - name: Unit tests (all packages, including empty stubs)
         run: pnpm test
 
   compose-smoke-test:
     runs-on: ubuntu-latest
-    # Prove Postgres/Redis/Qdrant come up healthy. Full compose-up +
-    # golden-query eval gate is added once apps/api, worker, and mcp-server exist.
+    # Prove Postgres/Redis/Qdrant come up healthy. Real product-path coverage
+    # is the integration-test job below — this job only gates infra startup.
     steps:
       - uses: actions/checkout@v4
 
@@ -64,6 +67,63 @@ jobs:
           echo "Services did not become healthy in time."
           docker compose logs
           exit 1
+
+      - name: Tear down
+        if: always()
+        working-directory: infra/compose
+        run: docker compose down -v
+
+  integration-test:
+    runs-on: ubuntu-latest
+    # Real product-path gate: full index -> embed -> extract -> retrieval
+    # (search_codebase / find_decision / explain_file) against a scripted
+    # local git repo and a fake OpenAI-compatible provider (test/e2e/fixtures)
+    # — no Ollama/Gemini/Groq/OpenRouter/GitHub PAT, no network egress.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: docker compose up (Postgres, Redis, Qdrant)
+        working-directory: infra/compose
+        run: docker compose up -d
+
+      - name: Wait for services to be healthy
+        working-directory: infra/compose
+        run: |
+          for i in $(seq 1 30); do
+            healthy=$(docker compose ps --format json | grep -c '"Health":"healthy"' || true)
+            if [ "$healthy" -ge 3 ]; then
+              echo "All services healthy."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Services did not become healthy in time."
+          docker compose logs
+          exit 1
+
+      - name: Run migrations
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgresql://codeoracle:change-me-in-dev@localhost:5432/codeoracle
+
+      - name: Integration test (index → embed → extract → retrieve)
+        run: pnpm test:integration
+        env:
+          DATABASE_URL: postgresql://codeoracle:change-me-in-dev@localhost:5432/codeoracle
+          REDIS_URL: redis://localhost:6379
+          QDRANT_URL: http://localhost:6333
 
       - name: Tear down
         if: always()

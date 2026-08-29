@@ -17,9 +17,11 @@
     "@codeoracle/db": "workspace:*",
     "@codeoracle/observability": "workspace:*",
     "@codeoracle/queue": "workspace:*",
+    "ioredis": "^5.4.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "ioredis-mock": "^8.13.1",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

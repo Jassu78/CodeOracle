@@ -43,6 +43,13 @@
       "when": 1787942500000,
       "tag": "0005_github_sources_unique_constraint",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787983803911,
+      "tag": "0006_fast_dreaming_celestial",
+      "breakpoints": true
     }
   ]
 }

@@ -5,17 +5,21 @@ import { fileURLToPath } from "node:url";
 import { loadEnv, loadProjectEnv } from "@codeoracle/config";
 import { JOB_NAMES, type IncrementalReindexJobPayload } from "@codeoracle/contracts";
 import {
+  closeDb,
+  createApiToken,
   createDb,
   getRepoByGithubFullName,
   getRepoById,
+  listApiTokens,
   registerGithubRepo,
   registerLocalRepo,
+  revokeApiToken,
 } from "@codeoracle/db";
 import { createLogger } from "@codeoracle/observability";
 import { createQueue, createRedisConnection, bullJobId } from "@codeoracle/queue";
 import { isAuthorized, unauthorizedBody } from "./lib/auth.js";
 import { checkDeepHealth } from "./lib/health.js";
-import { checkRateLimit, clientKey } from "./lib/rate-limit.js";
+import { checkRateLimit, clientKey } from "./lib/redis-rate-limit.js";
 import { parseRegisterRepoBody } from "./lib/schemas.js";
 import { handleGithubWebhook } from "./webhooks/handle-github-push.js";
 
@@ -49,12 +53,20 @@ async function main() {
   const env = loadEnv();
   const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
 
+  // One Redis connection + one BullMQ Queue for the whole process lifetime —
+  // reused by every request instead of opening/closing a fresh connection
+  // per webhook delivery or index trigger (that pattern doesn't scale past
+  // a handful of requests and risks exhausting Redis's max-clients under
+  // any real burst). Mirrors createDb's per-process pooling.
+  const redis = createRedisConnection(env.REDIS_URL);
+  const queue = createQueue(redis);
+
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
 
       if (req.method === "GET" && url.pathname === "/health") {
-        const health = await checkDeepHealth(env);
+        const health = await checkDeepHealth(env, redis);
         sendJson(res, health.ok ? 200 : 503, health);
         return;
       }
@@ -78,8 +90,6 @@ async function main() {
               };
             },
             enqueueIncremental: async ({ jobId, payload }) => {
-              const connection = createRedisConnection(env.REDIS_URL);
-              const queue = createQueue(connection);
               try {
                 await queue.add(JOB_NAMES.INCREMENTAL_REINDEX, payload satisfies IncrementalReindexJobPayload, {
                   jobId,
@@ -92,9 +102,6 @@ async function main() {
               } catch (err) {
                 if (isDuplicateJobError(err)) return "duplicate";
                 throw err;
-              } finally {
-                await queue.close();
-                await connection.quit();
               }
             },
           },
@@ -108,7 +115,7 @@ async function main() {
         return;
       }
 
-      if (req.method !== "GET" && !isAuthorized(req, env)) {
+      if (req.method !== "GET" && !(await isAuthorized(req, env, db))) {
         sendJson(res, 401, unauthorizedBody());
         return;
       }
@@ -156,7 +163,7 @@ async function main() {
 
       const indexMatch = url.pathname.match(/^\/repos\/([0-9a-f-]{36})\/index$/);
       if (req.method === "POST" && indexMatch) {
-        if (!checkRateLimit(`index:${clientKey(req)}`, 10, 60_000)) {
+        if (!(await checkRateLimit(redis, `index:${clientKey(req)}`, 10, 60_000))) {
           sendJson(res, 429, { error: "rate limit exceeded — max 10 index requests per minute" });
           return;
         }
@@ -168,8 +175,6 @@ async function main() {
           return;
         }
 
-        const connection = createRedisConnection(env.REDIS_URL);
-        const queue = createQueue(connection);
         const indexRunId = randomUUID();
         await queue.add(
           JOB_NAMES.FULL_INDEX,
@@ -186,10 +191,45 @@ async function main() {
             backoff: { type: "exponential", delay: 5000 },
           },
         );
-        await queue.close();
-        await connection.quit();
         log.info("Queued full_index", { repoId });
         sendJson(res, 202, { queued: true, job: JOB_NAMES.FULL_INDEX });
+        return;
+      }
+
+      // Per-repo bearer token lifecycle (see packages/db/src/repositories/api-tokens.ts).
+      // Scope note: any valid token authorizes admin routes above (not yet
+      // per-repo-restricted) — see README "Auth model" for the honest current state.
+      const tokensMatch = url.pathname.match(/^\/repos\/([0-9a-f-]{36})\/tokens$/);
+      if (req.method === "POST" && tokensMatch) {
+        const repoId = tokensMatch[1]!;
+        const row = await getRepoById(db, repoId);
+        if (!row) {
+          sendJson(res, 404, { error: "repo not found" });
+          return;
+        }
+        const { id, token } = await createApiToken(db, { repoId });
+        log.info("Issued API token", { repoId, tokenId: id });
+        sendJson(res, 201, { id, token, warning: "shown once — store it now" });
+        return;
+      }
+
+      if (req.method === "GET" && tokensMatch) {
+        const repoId = tokensMatch[1]!;
+        const tokens = await listApiTokens(db, repoId);
+        sendJson(res, 200, { tokens });
+        return;
+      }
+
+      const revokeMatch = url.pathname.match(/^\/repos\/([0-9a-f-]{36})\/tokens\/([0-9a-f-]{36})$/);
+      if (req.method === "DELETE" && revokeMatch) {
+        const [, repoId, tokenId] = revokeMatch as unknown as [string, string, string];
+        const revoked = await revokeApiToken(db, { repoId, tokenId });
+        if (!revoked) {
+          sendJson(res, 404, { error: "token not found for this repo" });
+          return;
+        }
+        log.info("Revoked API token", { repoId, tokenId });
+        sendJson(res, 200, { revoked: true });
         return;
       }
 
@@ -207,6 +247,17 @@ async function main() {
       githubWebhook: Boolean(env.GITHUB_WEBHOOK_SECRET),
     });
   });
+
+  const shutdown = async (signal: string) => {
+    log.info(`Received ${signal}, shutting down`, {});
+    server.close();
+    await queue.close();
+    await redis.quit();
+    await closeDb(env.DATABASE_URL);
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
 function headerString(value: string | string[] | undefined): string | undefined {
