@@ -36,6 +36,14 @@ Mounts the monorepo into Node containers and runs worker + API via `pnpm` (insta
 docker compose -f docker-compose.yml -f docker-compose.full.yml --profile full up -d
 ```
 
+## Optional `images` profile (built apps)
+
+Multi-stage images from `infra/docker/Dockerfile`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.images.yml --profile images up -d --build
+```
+
 Prefer host processes for day-to-day dogfood (`pnpm worker`, `pnpm api`).
 
 ## RAM note

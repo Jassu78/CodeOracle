@@ -3,8 +3,8 @@
 #
 # IMPORTANT: Only one worker replica per REDIS_URL (leader lock enforced in code).
 # These services mount the repo and run via pnpm — local/dev parity only.
-# Production/OCI packaging: host pnpm (supported) or future images under infra/docker.
-# MCP stays on the host (`pnpm mcp` / `pnpm mcp:http`) — editor stdio needs a local process.
+# Built images: see infra/docker/Dockerfile + docker-compose.images.yml (--profile images).
+# MCP stays on the host for editor stdio (`pnpm mcp`); HTTP MCP can use the images profile.
 
 services:
   worker:

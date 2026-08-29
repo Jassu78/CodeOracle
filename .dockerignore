@@ -1,0 +1,21 @@
+# Monorepo context — keep build contexts small.
+.git
+.github
+**/.turbo
+**/coverage
+**/node_modules
+**/dist
+data
+.env
+.env.*
+!.env.example
+providers.yaml
+*.log
+.DS_Store
+.cursor
+CodeOracle-local-repos
+test/e2e
+test/fixtures
+test/golden-queries
+**/*.test.ts
+**/test

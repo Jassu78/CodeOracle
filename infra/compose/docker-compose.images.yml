@@ -1,0 +1,99 @@
+# Image-based worker + API (built via infra/docker/Dockerfile).
+# Prefer this over the bind-mount `full` profile when you want fixed images.
+#
+# From repo root:
+#   docker build -f infra/docker/Dockerfile --build-arg APP=api -t codeoracle-api:local .
+#   docker build -f infra/docker/Dockerfile --build-arg APP=worker -t codeoracle-worker:local .
+#   cd infra/compose && docker compose -f docker-compose.yml -f docker-compose.images.yml --profile images up -d
+#
+# MCP HTTP (optional): build APP=mcp and run with CODEORACLE_MCP_TRANSPORT=http + bearer.
+# Editor stdio MCP still prefers host `pnpm mcp`.
+
+services:
+  worker:
+    profiles: ["images"]
+    image: codeoracle-worker:local
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+      args:
+        APP: worker
+    container_name: codeoracle-worker
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-codeoracle}:${POSTGRES_PASSWORD:-change-me-in-dev}@postgres:5432/${POSTGRES_DB:-codeoracle}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+      CODEORACLE_CLONE_DIR: /app/data/clones
+    volumes:
+      - clone_data:/app/data/clones
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+
+  api:
+    profiles: ["images"]
+    image: codeoracle-api:local
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+      args:
+        APP: api
+    container_name: codeoracle-api
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-codeoracle}:${POSTGRES_PASSWORD:-change-me-in-dev}@postgres:5432/${POSTGRES_DB:-codeoracle}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+      API_PORT: "3000"
+    ports:
+      - "${API_HOST_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+  mcp:
+    profiles: ["images"]
+    image: codeoracle-mcp:local
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+      args:
+        APP: mcp
+    container_name: codeoracle-mcp
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-codeoracle}:${POSTGRES_PASSWORD:-change-me-in-dev}@postgres:5432/${POSTGRES_DB:-codeoracle}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+      CODEORACLE_MCP_TRANSPORT: http
+      MCP_HTTP_HOST: 0.0.0.0
+      MCP_HTTP_PORT: "3100"
+    ports:
+      - "${MCP_HTTP_HOST_PORT:-3100}:3100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+volumes:
+  clone_data:
