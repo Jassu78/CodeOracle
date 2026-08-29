@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { and, inArray, ne } from "drizzle-orm";
 import type { EmbedChunksJobPayload } from "@codeoracle/contracts";
 import { JOB_NAMES } from "@codeoracle/contracts";
 import type { Env } from "@codeoracle/config";
@@ -33,14 +33,18 @@ export async function runEmbedChunks(opts: {
   const jobHistoryId = await startJobHistory(opts.db, {
     repoId: opts.payload.repoId,
     jobType: JOB_NAMES.EMBED_CHUNKS,
-    afterSha: `${opts.payload.indexRunId}/embed/${opts.payload.filePath}`,
+    dedupeKey: `${opts.payload.indexRunId}/embed/${opts.payload.filePath}`,
   });
 
   try {
+    // Retries (provider failover, BullMQ re-attempt) must not re-embed rows a
+    // prior attempt already finished — only re-run what's still pending.
     const rows = await opts.db
       .select()
       .from(chunks)
-      .where(inArray(chunks.id, opts.payload.chunkIds));
+      .where(
+        and(inArray(chunks.id, opts.payload.chunkIds), ne(chunks.embeddingStatus, "embedded")),
+      );
 
     if (rows.length === 0) {
       await finishJobHistory(opts.db, jobHistoryId, { status: "done", latencyMs: Date.now() - started });

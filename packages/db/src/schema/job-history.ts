@@ -3,9 +3,17 @@ import { pgTable, uuid, text, integer, timestamp, uniqueIndex } from "drizzle-or
 import { repos } from "./repos";
 
 /**
- * Job idempotency: every reindex job is keyed by (repo_id, after_sha).
- * The unique index on (repoId, jobType, afterSha) makes duplicate webhook
- * delivery a safe no-op at the database level.
+ * Job idempotency: every job is keyed by (repo_id, job_type, dedupe_key).
+ * The unique index makes duplicate webhook delivery / retry a safe no-op at
+ * the database level.
+ *
+ * `dedupeKey` is a generic dedupe token, not always a git SHA despite the
+ * column's original name (`after_sha`, renamed here) — callers pass a real
+ * `afterSha` for `incremental_reindex` (where it IS one), but
+ * `chunk_file`/`embed_chunks` pass `${indexRunId}/${filePath}` and
+ * `extract_decisions` passes a `github_sources` row id. The column name now
+ * matches every job type's actual usage instead of only the one that
+ * happens to be a SHA.
  */
 export const jobHistory = pgTable(
   "job_history",
@@ -15,7 +23,7 @@ export const jobHistory = pgTable(
       .notNull()
       .references(() => repos.id, { onDelete: "cascade" }),
     jobType: text("job_type").notNull(),
-    afterSha: text("after_sha"),
+    dedupeKey: text("dedupe_key"),
     status: text("status").notNull().default("queued"), // queued | running | done | error
     tokensUsed: integer("tokens_used").notNull().default(0),
     latencyMs: integer("latency_ms").notNull().default(0),
@@ -25,7 +33,7 @@ export const jobHistory = pgTable(
     idempotencyUnique: uniqueIndex("job_history_idempotency_unique").on(
       table.repoId,
       table.jobType,
-      table.afterSha,
+      table.dedupeKey,
     ),
   }),
 );

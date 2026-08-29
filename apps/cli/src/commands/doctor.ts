@@ -75,7 +75,7 @@ export async function runDoctor(): Promise<boolean> {
   const allOk = checks.every((c) => c.ok);
 
   if (allOk) {
-    p.outro(pc.green("Environment looks good. Ready for `codeoracle init` once it lands."));
+    p.outro(pc.green("Environment looks good. Run `codeoracle init` to get started."));
   } else {
     p.outro(pc.red("Environment is not ready — fix the items above and re-run `codeoracle doctor`."));
   }

@@ -22,7 +22,7 @@ export async function runChunkFile(opts: {
   const jobHistoryId = await startJobHistory(opts.db, {
     repoId: opts.payload.repoId,
     jobType: JOB_NAMES.CHUNK_FILE,
-    afterSha: `${opts.payload.indexRunId}/${opts.payload.filePath}`,
+    dedupeKey: `${opts.payload.indexRunId}/${opts.payload.filePath}`,
   });
 
   try {

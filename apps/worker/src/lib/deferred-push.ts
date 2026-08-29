@@ -95,7 +95,7 @@ export async function flushDeferredPushToQueue(opts: {
   const prior = await findJobHistoryByKey(opts.db, {
     repoId: opts.repoId,
     jobType: JOB_NAMES.INCREMENTAL_REINDEX,
-    afterSha: deferred.tipSha,
+    dedupeKey: deferred.tipSha,
   });
   if (prior?.status === "done") {
     await takeDeferredPush(opts.redis, opts.repoId);

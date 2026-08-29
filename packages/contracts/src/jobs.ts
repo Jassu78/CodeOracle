@@ -55,7 +55,8 @@ export const JobHistorySchema = z.object({
   id: z.string().uuid(),
   repoId: z.string().uuid(),
   jobType: z.enum(["full_index", "incremental_reindex", "chunk_file", "embed_chunks", "extract_decisions"]),
-  afterSha: z.string().nullable(),
+  /** Generic idempotency token — a real git SHA for incremental_reindex, but not for every job type. See packages/db schema comment. */
+  dedupeKey: z.string().nullable(),
   status: JobStatus,
   tokensUsed: z.number().int().nonnegative().default(0),
   latencyMs: z.number().int().nonnegative().default(0),

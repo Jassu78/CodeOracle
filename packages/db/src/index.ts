@@ -7,3 +7,4 @@ export * from "./repositories/prune-job-history";
 export * from "./repositories/chunk-embedding-status";
 export * from "./repositories/chunks";
 export * from "./repositories/decisions";
+export * from "./repositories/api-tokens";

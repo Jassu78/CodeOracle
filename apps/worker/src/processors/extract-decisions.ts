@@ -33,7 +33,7 @@ export async function runExtractDecisions(opts: {
     const jobHistoryId = await startJobHistory(opts.db, {
       repoId: opts.payload.repoId,
       jobType: JOB_NAMES.EXTRACT_DECISIONS,
-      afterSha: opts.payload.githubSourceId,
+      dedupeKey: opts.payload.githubSourceId,
     });
 
     try {

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@codeoracle/contracts": "workspace:*",
+    "@codeoracle/core-domain": "workspace:*",
     "@codeoracle/db": "workspace:*",
     "@qdrant/js-client-rest": "^1.12.0"
   },

@@ -86,6 +86,17 @@ export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort
     let attempted = 0;
     for (const endpoint of endpoints) {
       if (await this.circuits.isOpen(endpoint.id)) continue;
+      if (this.isMissingRequiredKey(endpoint.apiKeyEnv)) {
+        this.emitUsage({
+          providerId: endpoint.id,
+          model: endpoint.model,
+          kind: "embeddings",
+          latencyMs: 0,
+          success: false,
+          error: `apiKeyEnv "${endpoint.apiKeyEnv}" is set but empty at request time — skipping endpoint`,
+        });
+        continue;
+      }
       attempted += 1;
       const started = Date.now();
       try {
@@ -126,7 +137,7 @@ export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort
       }
     }
     if (attempted === 0) {
-      throw lastError ?? new Error("All embedding providers are circuit-open (rate limited)");
+      throw lastError ?? new Error("All embedding providers were skipped (circuit-open or missing API key)");
     }
     throw lastError ?? new Error("All embedding providers failed");
   }
@@ -139,6 +150,17 @@ export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort
     let attempted = 0;
     for (const endpoint of endpoints) {
       if (await this.circuits.isOpen(endpoint.id)) continue;
+      if (this.isMissingRequiredKey(endpoint.apiKeyEnv)) {
+        this.emitUsage({
+          providerId: endpoint.id,
+          model: endpoint.model,
+          kind: "chat",
+          latencyMs: 0,
+          success: false,
+          error: `apiKeyEnv "${endpoint.apiKeyEnv}" is set but empty at request time — skipping endpoint`,
+        });
+        continue;
+      }
       attempted += 1;
       const started = Date.now();
       try {
@@ -181,7 +203,7 @@ export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort
       }
     }
     if (attempted === 0) {
-      throw lastError ?? new Error("All chat providers are circuit-open (rate limited)");
+      throw lastError ?? new Error("All chat providers were skipped (circuit-open or missing API key)");
     }
     throw lastError ?? new Error("All chat providers failed");
   }
@@ -199,6 +221,21 @@ export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort
     const key = this.env[apiKeyEnv];
     if (!key?.trim()) return null;
     return key;
+  }
+
+  /**
+   * `loadProvidersConfig` fails loudly at process start if an enabled
+   * endpoint's `apiKeyEnv` is missing/empty (see packages/config). This is
+   * the same check applied again at request time, so a `ProviderRegistry`
+   * constructed directly from an in-memory config (tests, or a future
+   * caller that bypasses the loader) can't silently send an unauthenticated
+   * request to a provider that expects one — it skips to the next endpoint
+   * instead, consistent with "fail loud, never silently default anything
+   * security-relevant" (see packages/config/src/env.ts).
+   */
+  private isMissingRequiredKey(apiKeyEnv: string | null): boolean {
+    if (!apiKeyEnv) return false;
+    return !this.env[apiKeyEnv]?.trim();
   }
 
   private emitUsage(event: Parameters<NonNullable<ProviderUsageLogger>>[0]): void {

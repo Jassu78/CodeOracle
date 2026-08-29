@@ -1,7 +1,11 @@
 #!/usr/bin/env node
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { runDoctor } from "./commands/doctor.js";
 import { runDecisionsExtract, runDecisionsReview } from "./commands/decisions.js";
+import { runInit } from "./commands/init.js";
+import { runMcpConfig } from "./commands/mcp-config.js";
 import { runRepoIndex, runRepoRecover, runRepoRegister, runRepoStatus } from "./commands/repo.js";
 
 const program = new Command();
@@ -19,16 +23,35 @@ program
     process.exitCode = ok ? 0 : 1;
   });
 
-// `init`, `status`, `mcp-config` are scaffolded in later stages once
-// packages/gateway, packages/db, and the compose stack are wired together.
-// Registering stub commands now keeps `--help` honest about current scope
-// instead of pretending they exist.
 program
   .command("init")
-  .description("[not yet implemented]")
-  .action(() => {
-    console.log("`codeoracle init` is not implemented yet. Run `codeoracle doctor` for now.");
-    process.exitCode = 1;
+  .description("Guided setup: check environment, scaffold config, register + index a repo, print MCP config.")
+  .action(async () => {
+    await runInit();
+  });
+
+program
+  .command("mcp-config")
+  .description("Print a ready-to-paste editor MCP config for a registered repo.")
+  .argument("<repoId>", "Repo UUID from `repo register` / `repo status`")
+  .action(async (repoId: string) => {
+    await runMcpConfig(repoId);
+  });
+
+program
+  .command("status")
+  .description("Alias for `repo status` — defaults to CODEORACLE_REPO_ID from .env when no id is given.")
+  .argument("[repoId]", "Repo UUID (defaults to CODEORACLE_REPO_ID)")
+  .action(async (repoId: string | undefined) => {
+    const { loadProjectEnv } = await import("@codeoracle/config");
+    loadProjectEnv(resolve(fileURLToPath(new URL("../../..", import.meta.url))));
+    const target = repoId ?? process.env.CODEORACLE_REPO_ID;
+    if (!target) {
+      console.error("No repoId given and CODEORACLE_REPO_ID is not set in .env.");
+      process.exitCode = 1;
+      return;
+    }
+    await runRepoStatus(target);
   });
 
 const repo = program.command("repo").description("Register repositories and queue indexing jobs.");
