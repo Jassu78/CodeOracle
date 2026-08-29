@@ -4,5 +4,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["**/*.ts", "../fixtures/sample-repo/build.ts"]
+  "include": ["**/*.ts", "../fixtures/sample-repo/**/*.ts"]
 }

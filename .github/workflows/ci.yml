@@ -37,8 +37,14 @@ jobs:
       - name: Typecheck integration test fixtures
         run: pnpm typecheck:e2e
 
+      - name: Typecheck golden-query fixtures (D5.1)
+        run: pnpm typecheck:golden
+
       - name: Unit tests (all packages, including empty stubs)
         run: pnpm test
+
+      - name: Golden fixture + query-set tests (D5.1)
+        run: pnpm test:golden
 
   compose-smoke-test:
     runs-on: ubuntu-latest

@@ -212,7 +212,7 @@ describe.skipIf(!integrationEnabled)("full pipeline: index → embed → extract
         expect(found.results.length).toBeGreaterThan(0);
         for (const r of found.results) expect(r.sourceUrl).toMatch(/^https:\/\/github\.com\//);
 
-        const explained = await explainFile({ db, repoId, path: "cache.ts" });
+        const explained = await explainFile({ db, repoId, path: "cache/memory-cache.ts" });
         expect(explained.chunkSummaries.length).toBeGreaterThan(0);
       } finally {
         if (repoId) {

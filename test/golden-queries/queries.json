@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "fixture": "test/fixtures/sample-repo",
+  "description": "Golden queries for the purpose-built sample-repo fixture (PRD D5.1). Expectations are structural — file paths, topic substrings, citation URL fragments — scored by D5.2.",
+  "queries": [
+    {
+      "id": "search-memory-cache",
+      "tool": "search_codebase",
+      "query": "in-memory lookup cache Map process-local",
+      "expect": {
+        "anyOfFilePaths": ["cache/memory-cache.ts"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "search-signed-cookie-session",
+      "tool": "search_codebase",
+      "query": "signed cookie session HttpOnly SameSite",
+      "expect": {
+        "anyOfFilePaths": ["auth/session.ts"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "search-postgres-pool-max",
+      "tool": "search_codebase",
+      "query": "postgres connection pool max cap fail-loud",
+      "expect": {
+        "anyOfFilePaths": ["db/pool.ts"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "search-bearer-empty-reject",
+      "tool": "search_codebase",
+      "query": "reject empty bearer token Authorization",
+      "expect": {
+        "anyOfFilePaths": ["auth/bearer.ts"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "search-health-cache-stats",
+      "tool": "search_codebase",
+      "query": "health check cacheEntries poolMax",
+      "expect": {
+        "anyOfFilePaths": ["health/status.ts"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "search-clear-cache",
+      "tool": "search_codebase",
+      "query": "clearCache store Map",
+      "expect": {
+        "anyOfFilePaths": ["cache/memory-cache.ts"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "find-why-not-redis-cache",
+      "tool": "find_decision",
+      "query": "why in-memory cache instead of Redis",
+      "expect": {
+        "topicOrSummaryIncludes": ["cache", "redis", "memory"],
+        "sourceUrlIncludes": ["/commit/"]
+      }
+    },
+    {
+      "id": "find-why-signed-cookies",
+      "tool": "find_decision",
+      "query": "why signed cookies for session instead of server memory",
+      "expect": {
+        "topicOrSummaryIncludes": ["session", "cookie"],
+        "sourceUrlIncludes": ["/commit/"]
+      }
+    },
+    {
+      "id": "find-why-pool-cap",
+      "tool": "find_decision",
+      "query": "why cap postgres pool size",
+      "expect": {
+        "topicOrSummaryIncludes": ["pool", "connection"],
+        "sourceUrlIncludes": ["/commit/"]
+      }
+    },
+    {
+      "id": "find-why-fail-closed-bearer",
+      "tool": "find_decision",
+      "query": "why reject empty bearer tokens",
+      "expect": {
+        "topicOrSummaryIncludes": ["bearer", "token"],
+        "sourceUrlIncludes": ["/commit/"]
+      }
+    },
+    {
+      "id": "explain-memory-cache",
+      "tool": "explain_file",
+      "expect": {
+        "path": "cache/memory-cache.ts",
+        "requireNonEmpty": true
+      }
+    },
+    {
+      "id": "explain-session",
+      "tool": "explain_file",
+      "expect": {
+        "path": "auth/session.ts",
+        "requireNonEmpty": true
+      }
+    }
+  ]
+}
