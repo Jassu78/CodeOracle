@@ -31,4 +31,6 @@ Requires live Postgres, Redis, Qdrant only.
 
 ## stage-2-index.integration.test.ts
 
-Requires live Postgres, Redis, Qdrant, and Ollama (`nomic-embed-text` in `providers.yaml`) — the original Stage 2 ingestion-only check (no extract/retrieval).
+Lighter index-only check (crawl → chunk → embed → `ready`) against
+`packages/chunker/fixtures`, also using the fake provider — no Ollama /
+`providers.yaml`. Covered by the same CI job as full-pipeline.

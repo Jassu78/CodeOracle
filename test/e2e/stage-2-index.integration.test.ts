@@ -1,14 +1,18 @@
 /**
- * Stage 2 integration test — requires live Postgres, Redis, Qdrant, Ollama.
- * Run locally:  pnpm test:integration
- * Skipped in CI unless INTEGRATION_TEST=1 and compose stack is up.
+ * Stage 2 index-only integration test — crawl → chunk → embed → ready.
+ * Uses the fake OpenAI-compatible provider (no Ollama / providers.yaml),
+ * same CI-safe stack as full-pipeline.integration.test.ts.
+ *
+ * Run:  pnpm test:integration
+ * Requires: Postgres, Redis, Qdrant (docker compose up).
  */
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { loadEnv, loadProjectEnv, loadProvidersConfig } from "@codeoracle/config";
+import type { Env } from "@codeoracle/config";
+import type { ProvidersConfig } from "@codeoracle/contracts";
 import { JOB_NAMES } from "@codeoracle/contracts";
 import { chunks, createDb, registerLocalRepo, repos } from "@codeoracle/db";
 import { createQueue, createRedisConnection } from "@codeoracle/queue";
@@ -16,18 +20,61 @@ import { createQdrantClient, deleteRepoChunkVectors } from "@codeoracle/retrieva
 import { runFullIndexSetup, finalizeIndexIfComplete } from "@codeoracle/worker";
 import { runChunkFile } from "@codeoracle/worker";
 import { runEmbedChunks } from "@codeoracle/worker";
+import { startFakeProviderServer } from "./fixtures/fake-provider-server.js";
 
 const integrationEnabled = process.env.INTEGRATION_TEST === "1";
 const projectRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const fixtureRoot = resolve(projectRoot, "packages/chunker/fixtures");
 
+const env = {
+  NODE_ENV: "test" as const,
+  DATABASE_URL: process.env.DATABASE_URL ?? "postgresql://codeoracle:change-me-in-dev@localhost:5432/codeoracle",
+  REDIS_URL: process.env.REDIS_URL ?? "redis://localhost:6379",
+  QDRANT_URL: process.env.QDRANT_URL ?? "http://localhost:6333",
+  CODEORACLE_CLONE_DIR: "./data/clones",
+  PROVIDERS_CONFIG_PATH: "./providers.yaml",
+  WORKER_CONCURRENCY: 6,
+  DB_POOL_MAX: 5,
+  EMBED_BATCH_SIZE: 32,
+  JOB_HISTORY_RETENTION_DAYS: 30,
+  EXTRACT_CONCURRENCY: 2,
+  EXTRACT_MIN_CONFIDENCE: 0.5,
+  EXTRACT_QUEUE_LIMIT: 0,
+  CLONE_HISTORY_DEPTH: 200,
+  CLONE_MAX_REPOS: 50,
+  INDEX_RECOVER_ON_STARTUP: true,
+} as unknown as Env;
+
 describe.skipIf(!integrationEnabled)("stage-2 index pipeline", () => {
   it(
     "indexes a local fixture path to ready",
     async () => {
-      loadProjectEnv(projectRoot);
-      const env = loadEnv();
-      const providers = loadProvidersConfig(resolve(projectRoot, env.PROVIDERS_CONFIG_PATH));
+      const fakeProvider = await startFakeProviderServer();
+      const providers: ProvidersConfig = {
+        chat: [
+          {
+            id: "fake-chat",
+            kind: "chat",
+            baseUrl: fakeProvider.baseUrl,
+            apiKeyEnv: null,
+            model: "fake-model",
+            priority: 1,
+            enabled: true,
+          },
+        ],
+        embeddings: [
+          {
+            id: "fake-embed",
+            kind: "embeddings",
+            baseUrl: fakeProvider.baseUrl,
+            apiKeyEnv: null,
+            model: "fake-embed-model",
+            priority: 1,
+            enabled: true,
+          },
+        ],
+      };
+
       const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
       const redis = createRedisConnection(env.REDIS_URL);
       const queue = createQueue(redis);
@@ -95,6 +142,7 @@ describe.skipIf(!integrationEnabled)("stage-2 index pipeline", () => {
           await deleteRepoChunkVectors(qdrant, repoId);
           await db.delete(repos).where(eq(repos.id, repoId));
         }
+        await fakeProvider.stop();
         await queue.close();
         await redis.quit();
       }
