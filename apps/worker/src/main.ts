@@ -37,6 +37,9 @@ async function main() {
   const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
 
   logWorkerStartup({ cwd: projectRoot, concurrency: env.WORKER_CONCURRENCY });
+  log.info(leaderLock.isLeader ? "Acquired advisory leader marker" : "Running as replica worker", {
+    isLeader: leaderLock.isLeader,
+  });
 
   const pruned = await pruneJobHistory(db, env.JOB_HISTORY_RETENTION_DAYS);
   if (pruned > 0) log.info("Pruned old job_history rows", { count: pruned });

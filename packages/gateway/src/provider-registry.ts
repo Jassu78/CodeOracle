@@ -1,6 +1,8 @@
+import type IORedis from "ioredis";
 import type { ProvidersConfig } from "@codeoracle/contracts";
 import { getOrderedEndpoints } from "@codeoracle/config";
-import { CircuitBreaker, type CircuitBreakerOptions } from "./circuit-breaker.js";
+import { CircuitBreaker, type CircuitBreakerOptions, type CircuitBreakerPort } from "./circuit-breaker.js";
+import { RedisCircuitBreaker } from "./redis-circuit-breaker.js";
 import { OpenAiCompatAdapter, ProviderRequestError } from "./openai-compat-adapter.js";
 import type {
   ChatProviderPort,
@@ -10,11 +12,16 @@ import type {
 } from "./ports.js";
 import type { ProviderUsageLogger } from "@codeoracle/contracts";
 
-/** Process-wide breaker so extract jobs share 429 cool-downs. */
-let sharedCircuitBreaker = new CircuitBreaker();
+/**
+ * Process-local fallback breaker — only correct for a single worker process.
+ * Kept for tests and for callers that don't have a Redis connection handy
+ * (one-off CLI/MCP reads). Any multi-worker path (worker processors) MUST
+ * pass `redis` so cool-downs are actually shared — see RedisCircuitBreaker.
+ */
+let sharedCircuitBreaker: CircuitBreakerPort = new CircuitBreaker();
 
 /** Test helper — reset shared state between cases. */
-export function resetSharedCircuitBreaker(opts?: CircuitBreakerOptions): CircuitBreaker {
+export function resetSharedCircuitBreaker(opts?: CircuitBreakerOptions): CircuitBreakerPort {
   sharedCircuitBreaker = new CircuitBreaker(opts);
   return sharedCircuitBreaker;
 }
@@ -25,17 +32,25 @@ export type ProviderRegistryOptions = {
   /** D3.6 — log every attempt for observability and quota tracking. */
   onUsage?: ProviderUsageLogger;
   /**
-   * Skip providers after repeated 429s (default: shared process breaker,
-   * 2 failures → 5 min cool-down). Pass an instance/options to isolate.
+   * Redis connection to back the circuit breaker across worker processes.
+   * Pass this from every multi-worker call site (worker processors) so a
+   * 429 cool-down learned by one process is honored by all of them.
+   * Ignored if `circuitBreaker` is also supplied.
    */
-  circuitBreaker?: CircuitBreaker | CircuitBreakerOptions;
+  redis?: IORedis;
+  /**
+   * Skip providers after repeated 429s (default: Redis-backed when `redis`
+   * is supplied, else the shared in-process breaker — 2 failures → 5 min
+   * cool-down). Pass an instance/options to isolate (tests).
+   */
+  circuitBreaker?: CircuitBreakerPort | CircuitBreakerOptions;
 };
 
 export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort {
   private readonly config: ProvidersConfig;
   private readonly env: NodeJS.ProcessEnv;
   private readonly onUsage?: ProviderUsageLogger;
-  private readonly circuits: CircuitBreaker;
+  private readonly circuits: CircuitBreakerPort;
 
   constructor(opts: ProviderRegistryOptions | ProvidersConfig, env: NodeJS.ProcessEnv = process.env) {
     if ("config" in opts) {
@@ -44,8 +59,15 @@ export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort
       this.onUsage = opts.onUsage;
       if (opts.circuitBreaker instanceof CircuitBreaker) {
         this.circuits = opts.circuitBreaker;
+      } else if (
+        opts.circuitBreaker &&
+        typeof (opts.circuitBreaker as CircuitBreakerPort).isOpen === "function"
+      ) {
+        this.circuits = opts.circuitBreaker as CircuitBreakerPort;
       } else if (opts.circuitBreaker) {
-        this.circuits = new CircuitBreaker(opts.circuitBreaker);
+        this.circuits = new CircuitBreaker(opts.circuitBreaker as CircuitBreakerOptions);
+      } else if (opts.redis) {
+        this.circuits = new RedisCircuitBreaker(opts.redis);
       } else {
         this.circuits = sharedCircuitBreaker;
       }
@@ -63,13 +85,13 @@ export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort
     let lastError: unknown;
     let attempted = 0;
     for (const endpoint of endpoints) {
-      if (this.circuits.isOpen(endpoint.id)) continue;
+      if (await this.circuits.isOpen(endpoint.id)) continue;
       attempted += 1;
       const started = Date.now();
       try {
         const adapter = new OpenAiCompatAdapter(endpoint, this.resolveKey(endpoint.apiKeyEnv));
         const vectors = await adapter.embed(texts);
-        this.circuits.recordSuccess(endpoint.id);
+        await this.circuits.recordSuccess(endpoint.id);
         const result: EmbeddingResult = {
           providerId: endpoint.id,
           model: endpoint.model,
@@ -87,7 +109,7 @@ export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort
       } catch (err) {
         lastError = err;
         if (err instanceof ProviderRequestError) {
-          this.circuits.recordFailure(endpoint.id, err.status);
+          await this.circuits.recordFailure(endpoint.id, err.status);
         }
         this.emitUsage({
           providerId: endpoint.id,
@@ -116,13 +138,13 @@ export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort
     let lastError: unknown;
     let attempted = 0;
     for (const endpoint of endpoints) {
-      if (this.circuits.isOpen(endpoint.id)) continue;
+      if (await this.circuits.isOpen(endpoint.id)) continue;
       attempted += 1;
       const started = Date.now();
       try {
         const adapter = new OpenAiCompatAdapter(endpoint, this.resolveKey(endpoint.apiKeyEnv));
         const { content, tokensUsed } = await adapter.chatComplete(system, user);
-        this.circuits.recordSuccess(endpoint.id);
+        await this.circuits.recordSuccess(endpoint.id);
         const result: ChatCompletionResult = {
           providerId: endpoint.id,
           model: endpoint.model,
@@ -142,7 +164,7 @@ export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort
       } catch (err) {
         lastError = err;
         if (err instanceof ProviderRequestError) {
-          this.circuits.recordFailure(endpoint.id, err.status);
+          await this.circuits.recordFailure(endpoint.id, err.status);
         }
         this.emitUsage({
           providerId: endpoint.id,

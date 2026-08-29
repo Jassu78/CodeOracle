@@ -72,6 +72,7 @@ export async function runExtractDecisions(opts: {
         config: opts.providers,
         env: process.env,
         onUsage: logProviderUsage,
+        redis: opts.redis,
       });
 
       const body = source.body ?? "";

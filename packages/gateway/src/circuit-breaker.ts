@@ -7,7 +7,24 @@ export type CircuitBreakerOptions = {
   now?: () => number;
 };
 
-export class CircuitBreaker {
+/**
+ * Shared contract so `ProviderRegistry` doesn't care whether breaker state
+ * lives in-process (single-instance / tests) or in Redis (multi-worker).
+ * Methods are declared `Promise`-returning so callers can always `await`
+ * regardless of which implementation is wired in.
+ */
+export interface CircuitBreakerPort {
+  isOpen(providerId: string): Promise<boolean>;
+  recordSuccess(providerId: string): Promise<void>;
+  recordFailure(providerId: string, status: number): Promise<void>;
+}
+
+/**
+ * In-memory breaker — correct only within a single process. Used as the
+ * default when no Redis connection is supplied (tests, one-off CLI/MCP
+ * reads) and as the reference implementation `RedisCircuitBreaker` mirrors.
+ */
+export class CircuitBreaker implements CircuitBreakerPort {
   private readonly failureThreshold: number;
   private readonly cooldownMs: number;
   private readonly now: () => number;
@@ -23,7 +40,7 @@ export class CircuitBreaker {
   }
 
   /** True when this provider should be skipped. */
-  isOpen(providerId: string): boolean {
+  async isOpen(providerId: string): Promise<boolean> {
     const entry = this.state.get(providerId);
     if (!entry) return false;
     if (entry.openUntil <= 0) return false;
@@ -35,12 +52,12 @@ export class CircuitBreaker {
     return true;
   }
 
-  recordSuccess(providerId: string): void {
+  async recordSuccess(providerId: string): Promise<void> {
     this.state.delete(providerId);
   }
 
   /** Only 429 (and optional status) trips the breaker. */
-  recordFailure(providerId: string, status: number): void {
+  async recordFailure(providerId: string, status: number): Promise<void> {
     if (status !== 429) return;
     const prev = this.state.get(providerId) ?? { consecutiveFailures: 0, openUntil: 0 };
     const consecutiveFailures = prev.consecutiveFailures + 1;

@@ -22,7 +22,7 @@
     "@codeoracle/observability": "workspace:*",
     "@codeoracle/retrieval": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "drizzle-orm": "^0.38.3",
+    "drizzle-orm": "^0.45.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
