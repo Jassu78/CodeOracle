@@ -1,10 +1,18 @@
 import type { Env } from "@codeoracle/config";
 import { createDb, pingDatabase } from "@codeoracle/db";
-import { createRedisConnection } from "@codeoracle/queue";
+import type IORedis from "ioredis";
 
 export type HealthCheck = { ok: boolean; error?: string };
 
-export async function checkDeepHealth(env: Env): Promise<{
+/**
+ * `redis` is the process's shared connection (see apps/api/src/main.ts) —
+ * health checks reuse it instead of opening/closing a throwaway connection
+ * on every poll.
+ */
+export async function checkDeepHealth(
+  env: Env,
+  redis: IORedis,
+): Promise<{
   ok: boolean;
   checks: Record<string, HealthCheck>;
 }> {
@@ -19,9 +27,7 @@ export async function checkDeepHealth(env: Env): Promise<{
   }
 
   try {
-    const redis = createRedisConnection(env.REDIS_URL);
     const pong = await redis.ping();
-    await redis.quit();
     checks.redis = { ok: pong === "PONG" };
   } catch (err) {
     checks.redis = { ok: false, error: (err as Error).message };
