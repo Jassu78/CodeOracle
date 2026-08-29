@@ -94,6 +94,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Workspace packages export dist/ only — vitest resolves @codeoracle/*
+      # via package.json exports, so build before migrate + e2e.
+      - name: Build packages
+        run: pnpm build
+
       - name: docker compose up (Postgres, Redis, Qdrant)
         working-directory: infra/compose
         run: docker compose up -d
