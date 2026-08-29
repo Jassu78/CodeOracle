@@ -5,6 +5,10 @@
   "type": "module",
   "description": "Self-hosted MCP server that searches your code and remembers why it's built that way. Free-tier by default.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jassu78/CodeOracle.git"
+  },
   "engines": {
     "node": ">=20.11 <25",
     "pnpm": ">=9"
