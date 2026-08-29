@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planChunkSync } from "../src/lib/plan-chunk-sync.js";
+import { planChunkSync } from "../src/chunk-sync.js";
 
 describe("planChunkSync", () => {
   it("keeps matching hashes and embeds only new ones", () => {

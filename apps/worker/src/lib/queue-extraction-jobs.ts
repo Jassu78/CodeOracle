@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { Queue } from "bullmq";
 import { JOB_NAMES } from "@codeoracle/contracts";
 import { githubSources, type Database } from "@codeoracle/db";
-import { isTrivialSourceMessage } from "@codeoracle/extraction";
+import { isTrivialSourceMessage } from "@codeoracle/core-domain";
 import { bullJobId } from "@codeoracle/queue";
 import { safeReplaceJob } from "./safe-replace-job.js";
 

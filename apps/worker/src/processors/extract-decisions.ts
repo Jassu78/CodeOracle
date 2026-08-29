@@ -3,11 +3,8 @@ import type { Env } from "@codeoracle/config";
 import type { ExtractDecisionsJobPayload, ProvidersConfig } from "@codeoracle/contracts";
 import { JOB_NAMES } from "@codeoracle/contracts";
 import { githubSources, finishJobHistory, repos, startJobHistory, type Database } from "@codeoracle/db";
-import {
-  extractDecisionsFromSource,
-  filterByConfidence,
-  isTrivialSourceMessage,
-} from "@codeoracle/extraction";
+import { isTrivialSourceMessage } from "@codeoracle/core-domain";
+import { extractDecisionsFromSource, filterByConfidence } from "@codeoracle/extraction";
 import { ProviderRegistry } from "@codeoracle/gateway";
 import { logProviderUsage } from "@codeoracle/observability";
 import { createQdrantClient } from "@codeoracle/retrieval";

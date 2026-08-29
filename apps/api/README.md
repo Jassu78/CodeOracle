@@ -24,7 +24,7 @@ Two token classes, both real (no unused schema — see `packages/db/src/reposito
 1. **`API_TOKEN` env var** — a single bootstrap/admin token, constant-time compared.
 2. **Per-repo tokens** (`api_tokens` table) — minted via `POST /repos/:id/tokens`, only the SHA-256 hash is stored, the raw value is returned exactly once. Verified by hash lookup (`verifyApiToken`), and `lastUsedAt` is updated on each successful use.
 
-**What's still MVP, not full production auth:** routes are not yet scoped per-repo — any valid token (env or DB) authorizes every admin route above, not just the repo it was minted for. True per-route repo scoping is deferred to D5.3 (HTTP/SSE MCP transport + bearer tokens) alongside building the actual per-repo authorization checks. Today's improvement over "one shared secret" is real (issue/list/revoke lifecycle, hashed at rest, per-repo audit trail via `lastUsedAt`) — it's just not yet *scoped* auth.
+**What's still MVP, not full production auth:** routes are not yet scoped per-repo — any valid token (env or DB) authorizes every admin route above, not just the repo it was minted for. **Stage 5 D5.3 / H6 residual:** true per-route repo scoping is required before ship — do not treat the token table as “done auth.”
 
 ```bash
 # Mint a token for a repo (requires an existing admin token or open dev mode)
