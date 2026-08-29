@@ -43,6 +43,79 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return raw ? JSON.parse(raw) : {};
 }
 
+function decisionFromSourceText(blob: string): {
+  topic: string;
+  summary: string;
+  alternativesConsidered: string[];
+  confidence: number;
+  touchedPaths: string[];
+} | null {
+  const lower = blob.toLowerCase();
+  // Prefer empty over inventing WHY when the source has no rationale cues.
+  if (!/\b(instead of|rather than|so that|because|without|prefer|fail)\b/i.test(blob)) {
+    return null;
+  }
+
+  if (/\bcookie|session\b/.test(lower) && /memory|restart|redis/i.test(lower)) {
+    return {
+      topic: "Signed-cookie session store",
+      summary:
+        "Use signed cookies for session state instead of an in-memory server Map so sessions survive process restarts without Redis.",
+      alternativesConsidered: ["In-memory server Map", "Redis-backed sessions"],
+      confidence: 0.9,
+      touchedPaths: [],
+    };
+  }
+  if (/\bcache\b/.test(lower) && /redis|map|memory/i.test(lower)) {
+    return {
+      topic: "Process-local in-memory lookup cache",
+      summary:
+        "Cache expensive lookup results in a process-local Map rather than Redis for the single-process ₹0 MVP path.",
+      alternativesConsidered: ["No caching", "External Redis cache"],
+      confidence: 0.9,
+      touchedPaths: [],
+    };
+  }
+  if (/\bpool\b/.test(lower) && /postgres|connection/i.test(lower)) {
+    return {
+      topic: "Capped Postgres connection pool",
+      summary:
+        "Cap pool size explicitly so MCP tool bursts cannot open unbounded Postgres connections; fail loud instead.",
+      alternativesConsidered: ["Unbounded pool", "Single shared client"],
+      confidence: 0.88,
+      touchedPaths: [],
+    };
+  }
+  if (/\bbearer\b/.test(lower) && /empty|blank|reject|fail/i.test(lower)) {
+    return {
+      topic: "Reject empty bearer tokens",
+      summary:
+        "Fail closed when Authorization is present but empty — never treat a blank bearer as anonymous open access.",
+      alternativesConsidered: ["Treat empty bearer as anonymous", "Soft-warn only"],
+      confidence: 0.9,
+      touchedPaths: [],
+    };
+  }
+  if (/\bhealth\b/.test(lower) && /cache|pool/i.test(lower)) {
+    return {
+      topic: "Health exposes cache and pool stats",
+      summary:
+        "Expose cache size and configured pool max on /health so operators can observe process-local cache growth.",
+      alternativesConsidered: ["Debugger-only inspection"],
+      confidence: 0.85,
+      touchedPaths: [],
+    };
+  }
+
+  return {
+    topic: "Architectural choice from commit rationale",
+    summary: blob.split("\n").filter(Boolean).slice(0, 2).join(" ").slice(0, 400),
+    alternativesConsidered: [],
+    confidence: 0.7,
+    touchedPaths: [],
+  };
+}
+
 export type FakeProviderServer = {
   baseUrl: string;
   /** Chat completions received so far — useful for asserting prompt shape. */
@@ -73,19 +146,19 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
         const user = body.messages.find((m) => m.role === "user")?.content ?? "";
         chatCalls.push({ system, user });
 
-        // Deterministic, always-valid DecisionExtractionBatch. touchedPaths is
-        // intentionally empty — extract-decisions.ts overwrites it with
-        // deterministic git-derived paths when available (real code path),
-        // so the fake LLM does not need to invent file paths.
-        const decision = {
-          topic: "Introduce local cache layer for repeated lookups",
-          summary:
-            "Added an in-memory cache in front of the lookup function to avoid recomputing the same result on every call.",
-          alternativesConsidered: ["No caching (baseline)", "External Redis cache"],
-          confidence: 0.9,
-          touchedPaths: [],
-        };
-        const content = JSON.stringify({ decisions: [decision] });
+        // Derive a deterministic Decision from the extraction user prompt so
+        // multi-commit fixtures produce distinct, retrievable decisions
+        // (title/body are embedded in buildExtractionUserPrompt).
+        const title = (user.match(/^Title:\s*(.+)$/m)?.[1] ?? "").trim();
+        const bodyBlock = user.includes("Body:\n")
+          ? user.slice(user.indexOf("Body:\n") + "Body:\n".length).split("\nReminder:")[0] ?? ""
+          : "";
+        const blob = `${title}\n${bodyBlock}`;
+
+        const decision = decisionFromSourceText(blob);
+        const content = JSON.stringify({
+          decisions: decision ? [decision] : [],
+        });
 
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
