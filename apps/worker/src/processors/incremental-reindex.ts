@@ -20,6 +20,12 @@ import {
   startJobHistory,
   type Database,
 } from "@codeoracle/db";
+import {
+  classifyGithubCompareFiles,
+  classifyNameStatusLines,
+  planChunkSync,
+  type FileChange,
+} from "@codeoracle/core-domain";
 import { bullJobId } from "@codeoracle/queue";
 import {
   createQdrantClient,
@@ -33,14 +39,8 @@ import {
   isDeniedOrBinary,
   readRepoFile,
 } from "../crawler/walk-files.js";
-import {
-  classifyGithubCompareFiles,
-  classifyNameStatusLines,
-  type FileChange,
-} from "../lib/classify-diff.js";
 import { recordDeferredPush } from "../lib/deferred-push.js";
 import { beginIndexRun, clearIndexRun, markFileComplete } from "../lib/index-progress.js";
-import { planChunkSync } from "../lib/plan-chunk-sync.js";
 import { queueExtractDecisionsForSourceIds } from "../lib/queue-extraction-jobs.js";
 import { syncMergedPrsAtCommit } from "../lib/sync-merged-pr-at-commit.js";
 import { finalizeIndexIfComplete } from "./full-index.js";

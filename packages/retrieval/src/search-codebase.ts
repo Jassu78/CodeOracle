@@ -33,9 +33,9 @@ export type SearchCodebaseOpts = {
 };
 
 /**
- * Dense semantic code search for MCP `search_codebase`.
- * Embed → Qdrant (repo-scoped; hybrid RRF when collection supports sparse) →
- * Postgres hydrate → filePath citation → Zod. No LLM.
+ * Semantic code search for MCP `search_codebase`.
+ * Embed → Qdrant (repo-scoped; hybrid RRF + post-fusion cutoff when collection
+ * supports sparse) → Postgres hydrate → filePath citation → Zod. No LLM.
  */
 export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCodebaseOutput> {
   const query = opts.query.trim();

@@ -1,27 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { classifyGithubCompareFiles, classifyNameStatusLines } from "../src/lib/classify-diff.js";
+import { classifyGithubCompareFiles, classifyNameStatusLines } from "../src/file-change.js";
 
 describe("classifyNameStatusLines", () => {
-  it("classifies A/M/D and renames", () => {
+  it("maps A/M/D/R/C statuses", () => {
     expect(
       classifyNameStatusLines([
-        "A\tsrc/new.ts",
-        "M\tsrc/old.ts",
+        "A\tnew.ts",
+        "M\tedit.ts",
         "D\tgone.ts",
-        "R100\told/name.ts\tnew/name.ts",
+        "R100\told.ts\trenamed.ts",
+        "C50\tsrc.ts\tcopy.ts",
       ]),
     ).toEqual([
-      { path: "src/new.ts", kind: "added" },
-      { path: "src/old.ts", kind: "modified" },
+      { path: "new.ts", kind: "added" },
+      { path: "edit.ts", kind: "modified" },
       { path: "gone.ts", kind: "deleted" },
-      { path: "old/name.ts", kind: "deleted" },
-      { path: "new/name.ts", kind: "added" },
+      { path: "old.ts", kind: "deleted" },
+      { path: "renamed.ts", kind: "added" },
+      { path: "copy.ts", kind: "added" },
     ]);
   });
 });
 
 describe("classifyGithubCompareFiles", () => {
-  it("maps GitHub compare statuses", () => {
+  it("maps GitHub compare file statuses", () => {
     expect(
       classifyGithubCompareFiles([
         { filename: "a.ts", status: "added" },

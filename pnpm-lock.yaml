@@ -200,6 +200,9 @@ importers:
       '@codeoracle/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@codeoracle/core-domain':
+        specifier: workspace:*
+        version: link:../../packages/core-domain
       '@codeoracle/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -371,6 +374,9 @@ importers:
       '@codeoracle/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@codeoracle/core-domain':
+        specifier: workspace:*
+        version: link:../core-domain
       '@codeoracle/gateway':
         specifier: workspace:*
         version: link:../gateway

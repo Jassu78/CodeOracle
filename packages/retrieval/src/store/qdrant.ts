@@ -1,4 +1,5 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
+import { applyHybridCutoff, fuseRrf } from "@codeoracle/core-domain";
 import { textToSparseVector, type SparseVector } from "../sparse-embed.js";
 
 export const CHUNKS_COLLECTION = "code_chunks";
@@ -116,6 +117,11 @@ export async function deleteRepoChunkVectors(client: QdrantClient, repoId: strin
 /**
  * Code chunk search — hybrid dense+sparse RRF when collection supports it;
  * dense-only fallback for legacy collections.
+ *
+ * Hybrid path (H4): run channels separately so we know which list each id
+ * came from, fuse with domain RRF, then apply post-fusion cutoff
+ * (channel agreement + drop bottom ranks). `scoreThreshold` gates the dense
+ * channel (cosine); it is not applied as a cosine floor on fused RRF scores.
  */
 export async function searchSimilarChunks(
   client: QdrantClient,
@@ -129,6 +135,7 @@ export async function searchSimilarChunks(
   },
 ): Promise<Array<{ id: string; score: number }>> {
   const limit = opts.limit ?? 10;
+  const scoreThreshold = opts.scoreThreshold ?? 0.35;
   const filter = {
     must: [{ key: "repo_id", match: { value: opts.repoId } }],
   };
@@ -137,30 +144,39 @@ export async function searchSimilarChunks(
   if (mode === "hybrid" && opts.queryText?.trim()) {
     const sparse = textToSparseVector(opts.queryText);
     const prefetchLimit = Math.max(limit * 2, 20);
-    const response = await client.query(CHUNKS_COLLECTION, {
-      prefetch: [
-        {
-          query: opts.vector,
-          using: DENSE_VECTOR_NAME,
-          limit: prefetchLimit,
-          filter,
-        },
-        {
-          query: sparse,
-          using: SPARSE_VECTOR_NAME,
-          limit: prefetchLimit,
-          filter,
-        },
-      ],
-      query: { fusion: "rrf" },
+
+    const [denseResponse, sparseResponse] = await Promise.all([
+      client.query(CHUNKS_COLLECTION, {
+        query: opts.vector,
+        using: DENSE_VECTOR_NAME,
+        limit: prefetchLimit,
+        score_threshold: scoreThreshold,
+        filter,
+      }),
+      client.query(CHUNKS_COLLECTION, {
+        query: sparse,
+        using: SPARSE_VECTOR_NAME,
+        limit: prefetchLimit,
+        filter,
+      }),
+    ]);
+
+    const denseIds = denseResponse.points.map((p: { id: string | number }) => String(p.id));
+    const sparseIds = sparseResponse.points.map((p: { id: string | number }) => String(p.id));
+
+    const fused = fuseRrf([
+      { channel: "dense", ids: denseIds },
+      { channel: "sparse", ids: sparseIds },
+    ]);
+
+    // Prefer dual-channel agreement; drop weak single-channel tail ranks.
+    const cut = applyHybridCutoff(fused, {
       limit,
-      filter,
+      minChannels: 2,
+      relativeFloor: 0.5,
     });
 
-    return response.points.map((r: { id: string | number; score?: number }) => ({
-      id: String(r.id),
-      score: r.score ?? 0,
-    }));
+    return cut.map((h) => ({ id: h.id, score: h.score }));
   }
 
   const denseQuery =
@@ -171,7 +187,7 @@ export async function searchSimilarChunks(
   const response = await client.query(CHUNKS_COLLECTION, {
     ...denseQuery,
     limit,
-    score_threshold: opts.scoreThreshold ?? 0.35,
+    score_threshold: scoreThreshold,
     filter,
   });
 
