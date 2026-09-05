@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { runDoctor } from "./commands/doctor.js";
-import { runDecisionsExtract, runDecisionsFailures, runDecisionsReview } from "./commands/decisions.js";
+import { runDecisionsAltsAudit, runDecisionsExtract, runDecisionsFailures, runDecisionsReview } from "./commands/decisions.js";
 import { runInit } from "./commands/init.js";
 import { runMcpConfig } from "./commands/mcp-config.js";
 import { runRepoIndex, runRepoRecover, runRepoRegister, runRepoStatus } from "./commands/repo.js";
@@ -104,6 +104,21 @@ decisions
   .argument("<repoId>", "Repo UUID from `repo register`")
   .action(async (repoId: string) => {
     await runDecisionsReview(repoId);
+  });
+
+decisions
+  .command("alts-audit")
+  .description(
+    "Q3: bucket alternatives quality (filled / inconsistent / true_empty) against source text.",
+  )
+  .argument("<repoId>", "Repo UUID from `repo register`")
+  .option("--limit <n>", "Max decisions to scan (default 200)", (v: string) => Number.parseInt(v, 10))
+  .option("--show", "Print inconsistent samples")
+  .action(async (repoId: string, opts: { limit?: number; show?: boolean }) => {
+    await runDecisionsAltsAudit(repoId, {
+      limit: Number.isFinite(opts.limit) ? opts.limit : undefined,
+      show: Boolean(opts.show),
+    });
   });
 
 decisions

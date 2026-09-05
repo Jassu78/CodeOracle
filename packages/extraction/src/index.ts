@@ -10,8 +10,11 @@ export {
   extractJsonSubstring,
   coerceExtractionPayload,
   filterByConfidence,
+  listInconsistentAlternatives,
+  dropInconsistentAlternatives,
   ExtractionParseError,
   EXTRACTION_REPAIR_SYSTEM,
+  EXTRACTION_ALTERNATIVES_CONSISTENCY_REPAIR_SYSTEM,
 } from "./parse-extraction.js";
 export {
   extractDecisionsFromSource,

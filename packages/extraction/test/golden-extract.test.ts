@@ -42,6 +42,8 @@ describe("golden extract parse (G3.15 offline)", () => {
   it("system prompt still requires alternatives guidance", () => {
     expect(EXTRACTION_SYSTEM_PROMPT).toMatch(/alternativesConsidered/i);
     expect(EXTRACTION_SYSTEM_PROMPT).toMatch(/instead of|rather than/i);
+    expect(EXTRACTION_SYSTEM_PROMPT).toMatch(/Consistency \(mandatory\)/i);
+    expect(EXTRACTION_SYSTEM_PROMPT).toMatch(/INVALID/i);
   });
 
   for (const g of GOLDENS) {

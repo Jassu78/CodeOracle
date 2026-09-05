@@ -3,6 +3,7 @@ import {
   type DecisionExtractionBatch,
   type DecisionExtractionResult,
 } from "@codeoracle/contracts";
+import { isAlternativesInconsistent } from "@codeoracle/core-domain";
 
 export class ExtractionParseError extends Error {
   constructor(
@@ -132,7 +133,66 @@ export function filterByConfidence(
   return batch.decisions.filter((d) => d.confidence >= minConfidence);
 }
 
+export type AlternativesSourceContext = {
+  sourceTitle?: string;
+  sourceBody?: string;
+};
+
+/** Decisions that assert contrast in source/summary but left alternatives empty. */
+export function listInconsistentAlternatives(
+  batch: DecisionExtractionBatch,
+  source: AlternativesSourceContext = {},
+): DecisionExtractionResult[] {
+  return batch.decisions.filter((d) =>
+    isAlternativesInconsistent({
+      summary: d.summary,
+      alternativesConsidered: d.alternativesConsidered,
+      sourceTitle: source.sourceTitle,
+      sourceBody: source.sourceBody,
+    }),
+  );
+}
+
+/**
+ * Drop inconsistent decisions rather than invent alternatives.
+ * Prefer fewer/empty results over structured lies.
+ */
+export function dropInconsistentAlternatives(
+  batch: DecisionExtractionBatch,
+  source: AlternativesSourceContext = {},
+): { batch: DecisionExtractionBatch; dropped: number } {
+  const kept = batch.decisions.filter(
+    (d) =>
+      !isAlternativesInconsistent({
+        summary: d.summary,
+        alternativesConsidered: d.alternativesConsidered,
+        sourceTitle: source.sourceTitle,
+        sourceBody: source.sourceBody,
+      }),
+  );
+  return {
+    batch: { decisions: kept },
+    dropped: batch.decisions.length - kept.length,
+  };
+}
+
 export const EXTRACTION_REPAIR_SYSTEM = `You fix invalid JSON from a previous extraction attempt.
 Return ONLY valid JSON matching:
 {"decisions":[{"topic":"string","summary":"string","alternativesConsidered":["string"],"confidence":0.0,"touchedPaths":["string"]}]}
-No markdown fences. No commentary. Prefer {"decisions":[]} over inventing fields.`;
+No markdown fences. No commentary. Prefer {"decisions":[]} over inventing fields.
+If a decision summary contrasts options, alternativesConsidered MUST list the non-chosen option(s) using only source wording — never leave alternatives empty in that case.`;
+
+/**
+ * Dedicated repair when JSON parsed but alternatives consistency failed (Q3).
+ * Still forbid inventing alternatives not present in the source.
+ */
+export const EXTRACTION_ALTERNATIVES_CONSISTENCY_REPAIR_SYSTEM = `You fix architectural decision JSON that failed alternatives consistency validation.
+Return ONLY valid JSON matching:
+{"decisions":[{"topic":"string","summary":"string","alternativesConsidered":["string"],"confidence":0.0,"touchedPaths":["string"]}]}
+No markdown fences. No commentary.
+
+Rules:
+- When the source or a decision summary contrasts options (rather than / instead of / vs / chose X over Y / rejected), alternativesConsidered MUST list the non-chosen option(s).
+- Use only wording grounded in the provided source title/body. Do NOT invent technologies or options.
+- If you cannot name a grounded alternative, omit that decision entirely (fewer decisions or {"decisions":[]}).
+- Prefer omitting a decision over emitting contrast text with an empty alternativesConsidered array.`;
