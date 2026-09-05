@@ -4,6 +4,12 @@ Tracks changes to the CodeOracle codebase.
 
 ## Unreleased
 
+### Docs (5 Sep 2026)
+
+- Expanded root **README** — why/architecture, mermaid data-flow + ER diagrams, tech stack, Postgres/Qdrant/MCP schemas, operator setup.
+- Added **CONTRIBUTING.md** — principles, boundaries, tests, PR bar, Dependabot majors policy.
+- Refreshed package READMEs for `gateway`, `queue`, `observability` (no longer marked stub).
+
 ### Initial scaffold (27 Aug 2026)
 
 Initial monorepo bootstrap following hexagonal-core + plug-and-play-gateway structure.

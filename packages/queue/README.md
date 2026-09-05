@@ -1,5 +1,10 @@
 # @codeoracle/queue
 
-**Status:** Stub.
+Thin **BullMQ** helpers shared by `apps/api` (producer) and `apps/worker` (consumer).
 
-Job contracts (name + zod payload) already exist in `@codeoracle/contracts/src/jobs.ts`. This package adds BullMQ queue/worker registration on top — not implemented yet.
+| Export | Role |
+|--------|------|
+| `createQueue` | Queue named `codeoracle` |
+| `createWorker` | Worker with shared connection + concurrency |
+
+Job **names and Zod payloads** live in `@codeoracle/contracts` (`JOB_NAMES`, `*JobPayloadSchema`). Idempotency is recorded in Postgres `job_history`, not only in Redis.

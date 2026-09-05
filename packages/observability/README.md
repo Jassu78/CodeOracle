@@ -1,5 +1,10 @@
 # @codeoracle/observability
 
-**Status:** Stub.
+Cross-cutting ops helpers:
 
-Structured logging and per-job usage metering (`provider_id`, `model`, `latency_ms`, `tokens_used`) is not implemented yet.
+| Export | Role |
+|--------|------|
+| `createLogger` | Structured logger for apps/packages |
+| `logProviderUsage` | Meter provider calls (`provider_id`, `model`, `latency_ms`, `tokens_used`) |
+
+Keep this package free of business rules — domain policy stays in `@codeoracle/core-domain`.
