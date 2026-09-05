@@ -4,7 +4,7 @@
 
 Self-hosted. **₹0 for the default path** — no required paid API. Postgres + Redis + Qdrant via Docker Compose; embeddings via local Ollama (or any OpenAI-compatible host).
 
-> **Status:** Stages 0–4 on `main`. Stage 5 ship hardening — MCP tools, scoped API auth, Streamable HTTP, golden eval in CI.
+> **Status:** Stages 0–5 on `main` — MCP tools, scoped API auth, Streamable HTTP, golden eval in CI, and multi-stage Docker images for API / worker / MCP.
 
 ## Time-to-first-query (≤ 10 minutes)
 
@@ -154,4 +154,4 @@ PRs must pass lint, typecheck, unit, Compose smoke, integration e2e, and golden 
 
 MIT — see [`LICENSE`](./LICENSE). Copyright (c) 2026 Jaswanth Jogi.
 
-Launch checklist: MIT ✓ · `.env.example` ✓ · Compose data stack ✓ · host `pnpm` apps ✓ · optional multi-stage images (`infra/docker`).
+Launch checklist: MIT ✓ · `.env.example` ✓ · Compose data stack ✓ · host `pnpm` apps ✓ · multi-stage images (`infra/docker`).
