@@ -14,13 +14,13 @@ jobs:
   lint-typecheck-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: "pnpm"
@@ -51,7 +51,7 @@ jobs:
     # Prove Postgres/Redis/Qdrant come up healthy. Real product-path coverage
     # is the integration-test job below — this job only gates infra startup.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: docker compose up
         working-directory: infra/compose
@@ -86,13 +86,13 @@ jobs:
     # local git repo and a fake OpenAI-compatible provider (test/e2e/fixtures)
     # — no Ollama/Gemini/Groq/OpenRouter/GitHub PAT, no network egress.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9.15.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: "pnpm"
