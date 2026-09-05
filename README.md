@@ -306,7 +306,7 @@ MCP HTTP always needs a bearer.
 apps/        api · worker · mcp-server · cli
 packages/    contracts · config · db · core-domain · chunker
              gateway · retrieval · extraction · queue · observability
-infra/       compose · docker images · ci notes
+infra/       compose · docker images · dogfood ops · ci notes
 test/        sample-repo · golden eval · e2e
 ```
 
@@ -315,6 +315,7 @@ test/        sample-repo · golden eval · e2e
 ## Production notes
 
 - Keep **api + worker + mcp** running; Compose for Postgres / Redis / Qdrant.
+- **One worker only** per Redis queue — duplicates keep stale code in memory after rebuilds. See [`infra/dogfood/README.md`](./infra/dogfood/README.md).
 - Terminate TLS in front of API (and MCP HTTP if remote).
 - Do not expose Postgres, Redis, Qdrant, or Ollama to the public internet.
 - Set `API_TOKEN` and webhook secret before exposing the API.

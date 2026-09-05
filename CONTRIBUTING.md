@@ -211,7 +211,7 @@ Reviewers check:
 
 - Wait for required CI checks.
 - Squash or merge per repo settings; keep history readable.
-- After merge impacting worker/MCP packages on a dogfood host: **pull → rebuild package dists if needed → restart worker/MCP**.
+- After merge impacting worker/MCP packages on a dogfood host: **pull → rebuild package dists if needed → restart worker/MCP** using [`infra/dogfood/`](./infra/dogfood/README.md) (`restart-worker.sh`). Never leave two workers on the same Redis queue.
 
 ---
 
