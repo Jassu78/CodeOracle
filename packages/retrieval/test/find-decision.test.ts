@@ -6,6 +6,8 @@ const repoId = "9462ddb7-6064-4620-87c7-584566f643af";
 const activeId = "11111111-1111-4111-8111-111111111111";
 const supersededId = "22222222-2222-4222-8222-222222222222";
 const noCiteId = "33333333-3333-4333-8333-333333333333";
+const bleedId = "44444444-4444-4444-8444-444444444444";
+const nearTieId = "55555555-5555-4555-8555-555555555555";
 
 function row(partial: Partial<DecisionRow> & Pick<DecisionRow, "id" | "topic" | "summary" | "sourceUrl">): DecisionRow {
   return {
@@ -131,6 +133,87 @@ describe("findDecision", () => {
     );
   });
 
+  it("drops far neighbors via relative floor (Q2)", async () => {
+    const search = vi.fn(async () => [
+      { id: activeId, score: 0.89 },
+      { id: bleedId, score: 0.57 },
+      { id: nearTieId, score: 0.53 },
+    ]);
+    const getByIds = vi.fn(async () => [
+      row({
+        id: activeId,
+        topic: "GitHub HMAC webhook verification",
+        summary: "Verify raw-body HMAC.",
+        sourceUrl: "https://github.com/org/repo/pull/4",
+      }),
+      row({
+        id: bleedId,
+        topic: "Preventing Duplicate GitHub Source Records",
+        summary: "Unique constraints on sources.",
+        sourceUrl: "https://github.com/org/repo/pull/5",
+      }),
+      row({
+        id: nearTieId,
+        topic: "Principal-scoped API authentication",
+        summary: "Per-repo tokens.",
+        sourceUrl: "https://github.com/org/repo/pull/10",
+      }),
+    ]);
+
+    const out = await findDecision({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      topic: "GitHub webhook HMAC signature verification",
+      deps: { search, getByIds },
+    });
+
+    expect(out.results.map((r) => r.topic)).toEqual(["GitHub HMAC webhook verification"]);
+  });
+
+  it("keeps near-ties within the relative floor band (Q2)", async () => {
+    const search = vi.fn(async () => [
+      { id: activeId, score: 0.765 },
+      { id: nearTieId, score: 0.763 },
+      { id: bleedId, score: 0.625 },
+    ]);
+    const getByIds = vi.fn(async () => [
+      row({
+        id: activeId,
+        topic: "Hybrid dense + sparse RRF search activation",
+        summary: "Turn on hybrid.",
+        sourceUrl: "https://github.com/org/repo/pull/8",
+      }),
+      row({
+        id: nearTieId,
+        topic: "Hybrid Search Result Filtering Strategy",
+        summary: "Post-fusion cutoff.",
+        sourceUrl: "https://github.com/org/repo/pull/8b",
+      }),
+      row({
+        id: bleedId,
+        topic: "Dual-channel RRF hits with dense-only backfill",
+        summary: "Q1 backfill.",
+        sourceUrl: "https://github.com/org/repo/pull/q1",
+      }),
+    ]);
+
+    const out = await findDecision({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      topic: "why hybrid RRF search ranking cutoff",
+      deps: { search, getByIds },
+    });
+
+    expect(out.results.map((r) => r.topic)).toEqual([
+      "Hybrid dense + sparse RRF search activation",
+      "Hybrid Search Result Filtering Strategy",
+    ]);
+  });
+
   it("includes superseded history when includeHistory is true", async () => {
     const out = await findDecision({
       db: stubDb,
@@ -142,7 +225,7 @@ describe("findDecision", () => {
       deps: {
         search: async () => [
           { id: activeId, score: 0.9 },
-          { id: supersededId, score: 0.85 },
+          { id: supersededId, score: 0.88 },
         ],
         getByIds: async () => [
           row({
