@@ -3,6 +3,11 @@
  * Stable FNV-1a → index; values = raw term frequency.
  * Qdrant `modifier: idf` applies IDF at query time when configured.
  *
+ * Identifier splitting (Q1): camelCase / snake_case segments are emitted in
+ * addition to the raw token so NL queries ("verify github hmac") can overlap
+ * symbols like `verifyGitHubSignature`. Indexed vectors only pick this up
+ * after a full reindex; query-time benefit applies immediately.
+ *
  * Accepted trade-off — hash collisions: two distinct tokens landing on the
  * same 31-bit index silently merge their term frequencies (this is the
  * standard "hashing trick" used by e.g. scikit-learn's HashingVectorizer,
@@ -19,11 +24,46 @@ export type SparseVector = {
   values: number[];
 };
 
-const TOKEN_RE = /[A-Za-z_][A-Za-z0-9_]+|[0-9]+/g;
+const TOKEN_RE = /[A-Za-z_][A-Za-z0-9_]*|[0-9]+/g;
+
+/** Split one identifier into snake + camelCase segments (lowercased, len≥2). */
+export function splitIdentifierToken(raw: string): string[] {
+  const lowerRaw = raw.toLowerCase();
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (s: string) => {
+    if (s.length < 2 || seen.has(s)) return;
+    seen.add(s);
+    out.push(s);
+  };
+
+  push(lowerRaw);
+
+  for (const snakePart of raw.split("_")) {
+    if (!snakePart) continue;
+    const camelParts = snakePart
+      .replace(/([a-z0-9])([A-Z])/g, "$1\0$2")
+      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1\0$2")
+      .split("\0")
+      .filter(Boolean);
+    for (const part of camelParts) {
+      push(part.toLowerCase());
+    }
+  }
+
+  return out;
+}
 
 export function tokenizeForSparse(text: string): string[] {
-  const matches = text.toLowerCase().match(TOKEN_RE);
-  return matches ?? [];
+  const matches = text.match(TOKEN_RE) ?? [];
+  const out: string[] = [];
+  // Preserve multiplicity across the text so term frequency stays meaningful.
+  // Dedup within a single identifier happens in splitIdentifierToken.
+  for (const m of matches) {
+    out.push(...splitIdentifierToken(m));
+  }
+  return out;
 }
 
 function fnv1a(token: string): number {

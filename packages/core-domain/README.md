@@ -10,7 +10,7 @@ Postgres, or Qdrant imports. Adapters (`apps/worker`, `packages/retrieval`,
 | `trivial-source` | `isTrivialSourceMessage` — skip non-WHY commits/PRs before LLM spend |
 | `file-change` | git / GitHub path status → added/modified/deleted |
 | `chunk-sync` | `planChunkSync` — content-hash multiset diff for incremental index |
-| `hybrid-rrf` | Reciprocal Rank Fusion + post-fusion channel/rank cutoff |
+| `hybrid-rrf` | Reciprocal Rank Fusion + dual-channel preference + single-channel backfill cutoff |
 
 Capability packages may re-export for backward-compatible import paths, but the
 **source of truth** is here.

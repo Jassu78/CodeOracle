@@ -143,7 +143,8 @@ export async function searchSimilarChunks(
 
   if (mode === "hybrid" && opts.queryText?.trim()) {
     const sparse = textToSparseVector(opts.queryText);
-    const prefetchLimit = Math.max(limit * 2, 20);
+    // Prefetch wider than topK so dense-only code can enter fusion/backfill (Q1).
+    const prefetchLimit = Math.max(limit * 3, 30);
 
     const [denseResponse, sparseResponse] = await Promise.all([
       client.query(CHUNKS_COLLECTION, {
@@ -169,11 +170,13 @@ export async function searchSimilarChunks(
       { channel: "sparse", ids: sparseIds },
     ]);
 
-    // Prefer dual-channel agreement; drop weak single-channel tail ranks.
+    // Prefer dual-channel agreement; backfill dense-only (then sparse-only)
+    // so docs that win both channels cannot hide dense-only code (Q1).
     const cut = applyHybridCutoff(fused, {
       limit,
       minChannels: 2,
       relativeFloor: 0.5,
+      backfillSingleChannel: true,
     });
 
     return cut.map((h) => ({ id: h.id, score: h.score }));

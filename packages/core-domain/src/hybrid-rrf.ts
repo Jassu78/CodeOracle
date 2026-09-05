@@ -4,6 +4,10 @@
  * RRF fused ranks are not cosine similarities — `scoreThreshold` on the dense
  * channel still applies at prefetch time; this module drops weak fused ranks
  * after merge so hybrid results don't silently ignore a relevance floor.
+ *
+ * When `minChannels` is 2 (hybrid default), dual-channel hits are preferred,
+ * then **dense-only** (then sparse-only) backfill fills remaining slots so
+ * prose that wins both channels cannot entirely hide dense-only code (Q1).
  */
 
 export type RetrievalChannel = "dense" | "sparse";
@@ -52,35 +56,97 @@ export function fuseRrf(rankings: ChannelRanking[], k: number = RRF_K): FusedHit
 export type HybridCutoffOpts = {
   limit: number;
   /**
-   * Minimum number of channels that must have retrieved the id.
-   * 1 = appear in dense or sparse; 2 = require agreement from both.
-   * If dual-channel filtering empties the list, falls back to minChannels=1
+   * Minimum number of channels that must have retrieved the id for the
+   * *primary* pool.
+   * 1 = appear in dense or sparse; 2 = prefer dual-channel, then backfill.
+   * If dual-channel filtering empties the list, falls back to single-channel
    * so a sparse-only or dense-only corpus still returns something.
    */
   minChannels?: number;
   /**
    * Drop hits whose RRF score is below `topScore * relativeFloor`.
    * Default 0.5 — cuts the long tail of single-channel bottom ranks.
+   *
+   * Floors (when minChannels ≥ 2 with backfill):
+   * - Dual-channel pool: vs **dual-channel** top score
+   * - Backfill pool: vs **max single-channel RRF** `1/(RRF_K+1)` × relativeFloor
+     (not vs global top — dual-channel scores are ~2× single-channel, so a
+     global floor would reject almost all dense-only backfill)
    */
   relativeFloor?: number;
+  /**
+   * When minChannels ≥ 2 and dual-channel hits exist but leave slots free,
+   * append single-channel hits (dense-only before sparse-only).
+   * Default true. Set false to restore pre-Q1 “dual-only when non-empty” behavior.
+   */
+  backfillSingleChannel?: boolean;
 };
+
+function isDualChannel(h: FusedHit): boolean {
+  return h.channels.length >= 2;
+}
+
+function isDenseOnly(h: FusedHit): boolean {
+  return h.channels.length === 1 && h.channels[0] === "dense";
+}
+
+function isSparseOnly(h: FusedHit): boolean {
+  return h.channels.length === 1 && h.channels[0] === "sparse";
+}
+
+/** Dense-only before sparse-only; then score desc; then id. */
+function compareBackfill(a: FusedHit, b: FusedHit): number {
+  const rank = (h: FusedHit) => (isDenseOnly(h) ? 0 : isSparseOnly(h) ? 1 : 2);
+  return rank(a) - rank(b) || b.score - a.score || a.id.localeCompare(b.id);
+}
 
 /**
  * Post-fusion relevance floor: channel agreement + drop bottom ranks, then cap.
+ * With minChannels≥2 and backfill (default), dual-channel wins first, then
+ * dense-only / sparse-only fill remaining slots under a global floor.
  */
 export function applyHybridCutoff(hits: FusedHit[], opts: HybridCutoffOpts): FusedHit[] {
   if (hits.length === 0 || opts.limit <= 0) return [];
 
   const wantChannels = opts.minChannels ?? 1;
   const relativeFloor = opts.relativeFloor ?? 0.5;
+  const backfill = opts.backfillSingleChannel ?? true;
 
-  let eligible = hits.filter((h) => h.channels.length >= wantChannels);
-  if (eligible.length === 0 && wantChannels > 1) {
-    eligible = hits.filter((h) => h.channels.length >= 1);
+  if (wantChannels <= 1) {
+    const topScore = hits[0]!.score;
+    const floor = topScore * relativeFloor;
+    return hits.filter((h) => h.score >= floor).slice(0, opts.limit);
   }
-  if (eligible.length === 0) return [];
 
-  const topScore = eligible[0]!.score;
-  const floor = topScore * relativeFloor;
-  return eligible.filter((h) => h.score >= floor).slice(0, opts.limit);
+  const dual = hits.filter(isDualChannel);
+  if (dual.length === 0) {
+    // No agreement anywhere — fall back to any channel under global floor.
+    const topScore = hits[0]!.score;
+    const floor = topScore * relativeFloor;
+    return hits.filter((h) => h.score >= floor).slice(0, opts.limit);
+  }
+
+  const dualTop = dual[0]!.score;
+  const dualFloor = dualTop * relativeFloor;
+  const primary = dual.filter((h) => h.score >= dualFloor);
+
+  if (!backfill || primary.length >= opts.limit) {
+    return primary.slice(0, opts.limit);
+  }
+
+  // Max RRF for an id seen on exactly one channel at rank 0.
+  const singleChannelCap = 1 / (RRF_K + 1);
+  const backfillFloor = singleChannelCap * relativeFloor;
+  const taken = new Set(primary.map((h) => h.id));
+
+  const candidates = hits
+    .filter((h) => !taken.has(h.id) && !isDualChannel(h) && h.score >= backfillFloor)
+    .sort(compareBackfill);
+
+  const out = [...primary];
+  for (const h of candidates) {
+    if (out.length >= opts.limit) break;
+    out.push(h);
+  }
+  return out;
 }
