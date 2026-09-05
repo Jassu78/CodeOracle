@@ -53,88 +53,20 @@ Three MCP tools:
 
 ## Architecture
 
-One picture of how the pieces talk to each other:
+<p align="center">
+  <img src="docs/images/architecture-outline.jpg" alt="CodeOracle outline architecture — clients, apps, domain packages, and data plane" width="900" />
+</p>
 
-```mermaid
-flowchart TB
-  subgraph Clients["Clients"]
-    Editor["Editor MCP client"]
-    GitHub["GitHub webhooks"]
-    Ops["CLI / HTTP clients"]
-  end
+**Layers:** blue = who calls in · green = runtimes · amber = product logic · indigo = storage and models.
 
-  subgraph Apps["Apps"]
-    MCP["mcp-server"]
-    API["api"]
-    Worker["worker"]
-    CLI["cli"]
-  end
+**How work moves**
 
-  subgraph Domain["Domain and capabilities"]
-    Core["core-domain"]
-    Retrieval["retrieval"]
-    Extraction["extraction"]
-    Chunker["chunker"]
-    Gateway["gateway"]
-  end
+1. **Index** — queue → `worker` → `chunker` + `gateway` → Postgres + Qdrant  
+2. **Extract (optional)** — `worker` → `extraction` → chat via `gateway` → decisions (+ vectors)  
+3. **Ask** — editor → `mcp-server` → `retrieval` (+ `core-domain`) → cited answer  
+4. **Stay fresh** — GitHub push → `api` (HMAC) → incremental reindex  
 
-  subgraph Data["Data plane"]
-    PG[("Postgres")]
-    Redis[("Redis + BullMQ")]
-    Qdrant[("Qdrant")]
-    LLM["Ollama / OpenAI-compat hosts"]
-  end
-
-  Editor --> MCP
-  GitHub --> API
-  Ops --> API
-  Ops --> CLI
-
-  MCP --> Retrieval
-  API --> Redis
-  Worker --> Redis
-  CLI --> PG
-
-  Worker --> Chunker
-  Worker --> Extraction
-  Worker --> Gateway
-  Worker --> PG
-  Worker --> Qdrant
-
-  Retrieval --> Core
-  Retrieval --> PG
-  Retrieval --> Qdrant
-  Extraction --> Core
-  Extraction --> Gateway
-  Gateway --> LLM
-  API --> PG
-
-  classDef clients fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
-  classDef apps fill:#D1FAE5,stroke:#059669,color:#064E3B,stroke-width:2px
-  classDef domain fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
-  classDef data fill:#E0E7FF,stroke:#4F46E5,color:#312E81,stroke-width:2px
-
-  class Editor,GitHub,Ops clients
-  class MCP,API,Worker,CLI apps
-  class Core,Retrieval,Extraction,Chunker,Gateway domain
-  class PG,Redis,Qdrant,LLM data
-```
-
-| Color | Layer | Job |
-|-------|--------|-----|
-| Blue | Clients | Editors, GitHub, operators |
-| Green | Apps | Transports and job runners |
-| Amber | Domain | Rules + search/extract/chunk/LLM I/O |
-| Indigo | Data | Postgres, Redis, Qdrant, model hosts |
-
-**How work moves (plain language)**
-
-1. **Index** — `worker` takes `full_index` / `incremental_reindex` from Redis, chunks files, embeds via `gateway`, writes metadata to Postgres and vectors to Qdrant.
-2. **Extract (optional)** — `extraction` turns PR/commit text into Decisions (WHY + citation). Chat model used here only.
-3. **Ask** — `mcp-server` calls `retrieval`, which uses `core-domain` ranking policy and returns cited answers.
-4. **Stay fresh** — GitHub push → `api` verifies HMAC → queues incremental reindex.
-
-Packages never import apps. Shared shapes live in `@codeoracle/contracts`. Details for contributors: [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+Packages never import apps. Shared shapes live in `@codeoracle/contracts`. See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
 ---
 
