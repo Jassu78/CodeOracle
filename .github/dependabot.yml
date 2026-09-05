@@ -1,5 +1,6 @@
 # Weekly dependency + Actions updates for the pnpm monorepo.
 # Grouping keeps PR noise down; CI still gates each bump.
+# Majors are ignored here — review and bump those intentionally (queue/schema/toolchain risk).
 version: 2
 updates:
   - package-ecosystem: npm
@@ -15,6 +16,10 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    # Keep majors out of the weekly flood (eslint/typescript/zod/bullmq-class bumps).
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       production-dependencies:
         dependency-type: production
@@ -41,6 +46,9 @@ updates:
     commit-message:
       prefix: chore
       include: scope
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       github-actions:
         patterns:
