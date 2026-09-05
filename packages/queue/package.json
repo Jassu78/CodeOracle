@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@codeoracle/contracts": "workspace:*",
-    "bullmq": "^5.34.8",
+    "bullmq": "^6.3.4",
     "ioredis": "^5.4.2"
   },
   "devDependencies": {
