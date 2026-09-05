@@ -3,6 +3,7 @@ import {
   SearchCodebaseOutputSchema,
   type SearchCodebaseOutput,
 } from "@codeoracle/contracts";
+import { diversifyByFilePath } from "@codeoracle/core-domain";
 import { getChunksByIds, type ChunkRow, type Database } from "@codeoracle/db";
 import { searchSimilarChunks } from "./store/qdrant.js";
 import type { EmbedFn } from "./util.js";
@@ -32,10 +33,16 @@ export type SearchCodebaseOpts = {
   deps?: SearchCodebaseDeps;
 };
 
+/** Over-fetch so filePath diversity can still fill topK after collapsing dupes. */
+export function searchFetchLimit(topK: number): number {
+  return Math.max(topK * 2, topK + 5);
+}
+
 /**
  * Semantic code search for MCP `search_codebase`.
  * Embed → Qdrant (repo-scoped; hybrid RRF + post-fusion cutoff when collection
- * supports sparse) → Postgres hydrate → filePath citation → Zod. No LLM.
+ * supports sparse) → Postgres hydrate → filePath diversity → citation → Zod.
+ * No LLM.
  */
 export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCodebaseOutput> {
   const query = opts.query.trim();
@@ -48,6 +55,7 @@ export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCo
 
   const limit = opts.topK ?? 10;
   const scoreThreshold = opts.scoreThreshold ?? 0.35;
+  const fetchLimit = searchFetchLimit(limit);
 
   const deps: SearchCodebaseDeps = opts.deps ?? {
     search: (args) =>
@@ -70,7 +78,7 @@ export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCo
     repoId: opts.repoId,
     vector,
     queryText: query,
-    limit,
+    limit: fetchLimit,
     scoreThreshold,
   });
 
@@ -81,14 +89,14 @@ export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCo
   const rows = await deps.getByIds(hits.map((h) => h.id));
   const byId = new Map(rows.map((r) => [r.id, r]));
 
-  const results: SearchCodebaseOutput["results"] = [];
+  const hydrated: SearchCodebaseOutput["results"] = [];
   for (const hit of hits) {
     const row = byId.get(hit.id);
     if (!row) continue;
     const filePath = row.filePath?.trim() ?? "";
     if (!filePath) continue; // citation mandatory
 
-    results.push({
+    hydrated.push({
       chunkId: row.id,
       filePath,
       symbolName: row.symbolName ?? null,
@@ -98,5 +106,6 @@ export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCo
     });
   }
 
+  const results = diversifyByFilePath(hydrated, limit);
   return SearchCodebaseOutputSchema.parse({ results });
 }

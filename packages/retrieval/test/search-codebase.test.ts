@@ -116,7 +116,49 @@ describe("searchCodebase", () => {
     });
     expect(out.results[1]?.filePath).toBe("apps/api/src/session.ts");
     expect(search).toHaveBeenCalledWith(
-      expect.objectContaining({ repoId, limit: 5, scoreThreshold: 0.35 }),
+      expect.objectContaining({ repoId, limit: 10, scoreThreshold: 0.35 }),
     );
+  });
+
+  it("diversifies by filePath so duplicate docs cannot fill topK (Q1)", async () => {
+    const ids = [
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    ];
+    const search = vi.fn(async () => [
+      { id: ids[0]!, score: 0.58 },
+      { id: ids[1]!, score: 0.47 },
+      { id: ids[2]!, score: 0.24 },
+      { id: ids[3]!, score: 0.237 },
+    ]);
+    const getByIds = vi.fn(async () => [
+      row({ id: ids[0]!, filePath: "apps/api/README.md", content: "doc a" }),
+      row({ id: ids[1]!, filePath: "README.md", content: "doc b" }),
+      row({ id: ids[2]!, filePath: "apps/api/README.md", content: "doc a again" }),
+      row({
+        id: ids[3]!,
+        filePath: "apps/api/src/webhooks/github-signature.ts",
+        content: "export function verifyGitHubSignature() {}",
+        symbolName: "verifyGitHubSignature",
+      }),
+    ]);
+
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "where do we verify GitHub webhook HMAC signatures",
+      topK: 3,
+      deps: { search, getByIds },
+    });
+
+    expect(out.results.map((r) => r.filePath)).toEqual([
+      "apps/api/README.md",
+      "README.md",
+      "apps/api/src/webhooks/github-signature.ts",
+    ]);
   });
 });
