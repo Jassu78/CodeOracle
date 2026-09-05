@@ -1,12 +1,15 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import pc from "picocolors";
 import { loadEnv, loadProjectEnv } from "@codeoracle/config";
+import { classifyAlternativesQuality } from "@codeoracle/core-domain";
 import {
   clearRepoDecisions,
   closeDb,
   createDb,
+  decisions,
+  githubSources,
   listDecisionsForReview,
   listFailedExtractJobs,
   repos,
@@ -71,6 +74,106 @@ export async function runDecisionsReview(repoId: string): Promise<void> {
   }
 }
 
+
+
+/**
+ * Q3 ops audit: bucket stored decisions vs source text.
+ * filled | inconsistent | true_empty — no invent / no fill-rate hacks.
+ */
+export async function runDecisionsAltsAudit(
+  repoId: string,
+  opts: { limit?: number; show?: boolean } = {},
+): Promise<void> {
+  loadProjectEnv(projectRoot);
+  const env = loadEnv();
+  const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
+  const limit = opts.limit && opts.limit > 0 ? opts.limit : 200;
+
+  try {
+    const [repo] = await db.select().from(repos).where(eq(repos.id, repoId)).limit(1);
+    if (!repo) {
+      console.error(pc.red(`Repo not found: ${repoId}`));
+      process.exitCode = 1;
+      return;
+    }
+
+    const rows = await db
+      .select({
+        id: decisions.id,
+        topic: decisions.topic,
+        summary: decisions.summary,
+        alternativesConsidered: decisions.alternativesConsidered,
+        sourceUrl: decisions.sourceUrl,
+        confidence: decisions.confidence,
+        sourceTitle: githubSources.title,
+        sourceBody: githubSources.body,
+      })
+      .from(decisions)
+      .leftJoin(githubSources, eq(decisions.sourceUrl, githubSources.sourceUrl))
+      .where(eq(decisions.repoId, repoId))
+      .orderBy(desc(decisions.decidedAt))
+      .limit(limit);
+
+    if (rows.length === 0) {
+      console.log(pc.yellow(`No decisions for ${repo.githubFullName ?? repoId}.`));
+      return;
+    }
+
+    const buckets = {
+      filled: [] as typeof rows,
+      inconsistent: [] as typeof rows,
+      true_empty: [] as typeof rows,
+    };
+
+    for (const row of rows) {
+      const bucket = classifyAlternativesQuality({
+        summary: row.summary,
+        alternativesConsidered: row.alternativesConsidered ?? [],
+        sourceTitle: row.sourceTitle ?? undefined,
+        sourceBody: row.sourceBody ?? undefined,
+      });
+      buckets[bucket].push(row);
+    }
+
+    const total = rows.length;
+    const pct = (n: number) => `${((100 * n) / total).toFixed(1)}%`;
+
+    console.log(
+      pc.bold(`Alternatives audit for ${repo.githubFullName ?? repoId}`) +
+        pc.dim(` (${total} decisions)\n`),
+    );
+    console.log(
+      `  filled         ${buckets.filled.length.toString().padStart(4)}  ${pct(buckets.filled.length)}  — has alternatives`,
+    );
+    console.log(
+      `  inconsistent   ${buckets.inconsistent.length.toString().padStart(4)}  ${pct(buckets.inconsistent.length)}  — empty alts but contrast in source/summary`,
+    );
+    console.log(
+      `  true_empty     ${buckets.true_empty.length.toString().padStart(4)}  ${pct(buckets.true_empty.length)}  — empty alts, no contrast cue (honest or weak source)`,
+    );
+    console.log("");
+    console.log(
+      pc.dim(
+        "Exit target for Q3 gate: inconsistent → ~0 on new extracts. true_empty is allowed.",
+      ),
+    );
+
+    if (opts.show && buckets.inconsistent.length > 0) {
+      console.log(pc.bold("\nInconsistent samples:"));
+      for (const row of buckets.inconsistent.slice(0, 20)) {
+        console.log(pc.red(`• ${row.topic}`) + pc.dim(` conf=${row.confidence.toFixed(2)}`));
+        console.log(pc.dim(`  ${row.summary.slice(0, 160)}`));
+        console.log(pc.underline(row.sourceUrl));
+      }
+    }
+
+    if (buckets.inconsistent.length > 0) {
+      process.exitCode = 2;
+    }
+  } finally {
+    await closeDb(env.DATABASE_URL);
+  }
+}
 
 /** List recent failed extract_decisions jobs (G3.21). */
 export async function runDecisionsFailures(repoId: string): Promise<void> {

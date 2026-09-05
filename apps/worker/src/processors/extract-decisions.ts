@@ -27,7 +27,12 @@ export async function runExtractDecisions(opts: {
   redis: IORedis;
   db: Database;
   payload: ExtractDecisionsJobPayload;
-}): Promise<{ inserted: number; skipped: boolean }> {
+}): Promise<{
+  inserted: number;
+  skipped: boolean;
+  consistencyRepaired?: boolean;
+  droppedInconsistent?: number;
+}> {
   return withExtractConcurrency(opts.redis, opts.env.EXTRACT_CONCURRENCY, async () => {
     const started = Date.now();
     const minConfidence = opts.env.EXTRACT_MIN_CONFIDENCE ?? MIN_EXTRACTION_CONFIDENCE;
@@ -165,7 +170,12 @@ export async function runExtractDecisions(opts: {
           latencyMs: Date.now() - started,
           tokensUsed: extraction.tokensUsed,
         });
-        return { inserted: 0, skipped: false };
+        return {
+          inserted: 0,
+          skipped: false,
+          consistencyRepaired: extraction.consistencyRepaired,
+          droppedInconsistent: extraction.droppedInconsistent,
+        };
       }
 
       const qdrant = createQdrantClient(opts.env.QDRANT_URL);
@@ -189,7 +199,12 @@ export async function runExtractDecisions(opts: {
         tokensUsed: extraction.tokensUsed,
       });
 
-      return { inserted, skipped: false };
+      return {
+        inserted,
+        skipped: false,
+        consistencyRepaired: extraction.consistencyRepaired,
+        droppedInconsistent: extraction.droppedInconsistent,
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await finishJobHistory(opts.db, jobHistoryId, {

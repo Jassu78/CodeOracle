@@ -17,6 +17,7 @@
   "dependencies": {
     "@codeoracle/config": "workspace:*",
     "@codeoracle/contracts": "workspace:*",
+    "@codeoracle/core-domain": "workspace:*",
     "@codeoracle/db": "workspace:*",
     "@codeoracle/queue": "workspace:*",
     "@codeoracle/retrieval": "workspace:*",
