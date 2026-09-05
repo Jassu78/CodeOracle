@@ -24,7 +24,7 @@
     "@codeoracle/contracts": "workspace:*",
     "zod": "^3.24.1",
     "yaml": "^2.7.0",
-    "dotenv": "^16.4.7"
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "tsup": "^8.3.5",
