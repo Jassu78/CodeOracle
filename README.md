@@ -2,17 +2,37 @@
 
 **Self-hosted MCP server that searches your codebase and remembers why it was built that way.**
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![CI](https://github.com/Jassu78/CodeOracle/actions/workflows/ci.yml/badge.svg)](https://github.com/Jassu78/CodeOracle/actions/workflows/ci.yml)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20.11%20%3C25-brightgreen)](https://nodejs.org)
+[![pnpm](https://img.shields.io/badge/pnpm-9-F69220)](https://pnpm.io)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)](https://www.typescriptlang.org/)
+[![MCP](https://img.shields.io/badge/MCP-compatible-black)](https://modelcontextprotocol.io/)
+
 Plug it into Cursor, Claude Code, or any MCP client. Index once. Ask with citations. Stay fresh via GitHub webhooks or a local reindex.
 
-The default path is **₹0 / $0**: local Ollama embeddings. Chat models are optional and only needed when you extract architectural decisions.
+Default path is **₹0 / $0** (local Ollama embeddings). Chat models are optional — only needed to extract architectural decisions.
 
-| | |
-|---|---|
-| **License** | [MIT](./LICENSE) |
-| **Status** | Stages 0–5 on `main` |
-| **Runtime** | Node 20.11+ · pnpm 9.15 |
-| **Stack** | Postgres 16 · Redis 7 · Qdrant · BullMQ · Ollama |
-| **Contribute** | [`CONTRIBUTING.md`](./CONTRIBUTING.md) |
+Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md) · Stages 0–5 on `main`
+
+---
+
+## Architecture
+
+<p align="center">
+  <img src="docs/images/architecture-outline.jpg" alt="CodeOracle outline architecture — clients, apps, domain packages, and data plane" width="900" />
+</p>
+
+**Layers:** blue = who calls in · green = runtimes · amber = product logic · indigo = storage and models.
+
+| Path | Flow |
+|------|------|
+| **Ask** | Editor → `mcp-server` → `retrieval` (+ `core-domain`) → Postgres / Qdrant → cited answer |
+| **Index** | CLI/API → Redis → `worker` → `chunker` + `gateway` → Postgres + Qdrant |
+| **Extract** | `worker` → `extraction` → `gateway` (chat) → decisions in Postgres (+ vectors) |
+| **Fresh** | GitHub push → `api` (HMAC) → `incremental_reindex` |
+
+Packages never import apps. Shared shapes live in `@codeoracle/contracts`.
 
 ---
 
@@ -39,34 +59,13 @@ It does **not** replace the model. It **narrows the haystack** so the model spen
 
 ## What you get
 
-Three MCP tools:
-
 | Tool | What it does | Needs |
 |------|----------------|-------|
 | `search_codebase` | Hybrid search over indexed chunks | Embeddings |
 | `explain_file` | File chunks + related decisions (no LLM rewrite) | Index |
 | `find_decision` | WHY, alternatives, confidence, source URL | Extract once with a chat model; queries are retrieval only |
 
-**Typical loop:** register a repo → worker indexes → optional decision extract → connect MCP → optional GitHub push webhooks for incremental updates.
-
----
-
-## Architecture
-
-<p align="center">
-  <img src="docs/images/architecture-outline.jpg" alt="CodeOracle outline architecture — clients, apps, domain packages, and data plane" width="900" />
-</p>
-
-**Layers:** blue = who calls in · green = runtimes · amber = product logic · indigo = storage and models.
-
-**How work moves**
-
-1. **Index** — queue → `worker` → `chunker` + `gateway` → Postgres + Qdrant  
-2. **Extract (optional)** — `worker` → `extraction` → chat via `gateway` → decisions (+ vectors)  
-3. **Ask** — editor → `mcp-server` → `retrieval` (+ `core-domain`) → cited answer  
-4. **Stay fresh** — GitHub push → `api` (HMAC) → incremental reindex  
-
-Packages never import apps. Shared shapes live in `@codeoracle/contracts`. See [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+**Typical loop:** register a repo → worker indexes → optional decision extract → connect MCP → optional GitHub push webhooks.
 
 ---
 
@@ -102,7 +101,7 @@ Postgres is the source of truth. Qdrant stores vectors only.
 
 **Qdrant:** `code_chunks` (dense + sparse), `decisions` (dense).
 
-**MCP result shapes** (citations required) — see [`packages/contracts/src/mcp.ts`](./packages/contracts/src/mcp.ts):
+**MCP result shapes** (citations required) — [`packages/contracts/src/mcp.ts`](./packages/contracts/src/mcp.ts):
 
 ```ts
 // search_codebase → { results: [{ chunkId, filePath, symbolName, content, score, repoId }] }
@@ -321,6 +320,8 @@ test/        sample-repo · golden eval · e2e
 - Set `API_TOKEN` and webhook secret before exposing the API.
 - Images: [`infra/docker/README.md`](./infra/docker/README.md).
 - Full reindex recreates Qdrant `code_chunks` — fine for single-repo dogfood; plan multi-repo carefully.
+
+**GitHub Pages / public docs site:** parked on purpose while the repo is **private**. Revisit after a public launch (Q6 / homepage) — not before.
 
 ---
 
