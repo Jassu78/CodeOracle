@@ -22,7 +22,7 @@
     "@codeoracle/queue": "workspace:*",
     "@codeoracle/retrieval": "workspace:*",
     "@codeoracle/worker": "workspace:*",
-    "@clack/prompts": "^0.9.1",
+    "@clack/prompts": "^0.11.0",
     "commander": "^13.0.0",
     "drizzle-orm": "^0.45.2",
     "picocolors": "^1.1.1"
