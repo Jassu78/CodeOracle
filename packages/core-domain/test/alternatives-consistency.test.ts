@@ -16,6 +16,9 @@ describe("textHasContrastCue", () => {
   it("does not flag ordinary rationale without a contrast", () => {
     expect(textHasContrastCue("Added HMAC verification for GitHub push webhooks.")).toBe(false);
     expect(textHasContrastCue("Enforce a daily token budget for extract jobs.")).toBe(false);
+    expect(
+      textHasContrastCue("Skip commits already covered at queue time, avoiding redundant extract."),
+    ).toBe(false);
   });
 });
 

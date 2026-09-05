@@ -13,16 +13,15 @@ const CONTRAST_CUE_PATTERNS: RegExp[] = [
   /\brather\s+than\b/i,
   /\binstead\s+of\b/i,
   /\bas\s+opposed\s+to\b/i,
-  /\bcompared\s+to\b/i,
   /\bin\s+preference\s+to\b/i,
   /\bchose\b[\s\S]{0,80}\bover\b/i,
   /\bpicked\b[\s\S]{0,80}\bover\b/i,
   /\bprefer(?:red|ring)?\b[\s\S]{0,80}\bover\b/i,
   /\brejected\b/i,
-  /\bvs\.?\b/i,
   /\bversus\b/i,
+  // Word-boundary "vs" / "vs." — avoid matching inside words.
+  /(?:^|[^\w])vs\.?(?:$|[^\w])/i,
   /\bnot\s+using\b/i,
-  /\bavoid(?:ed|ing)?\b/i,
 ];
 
 export function textHasContrastCue(text: string): boolean {
