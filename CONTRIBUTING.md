@@ -117,19 +117,7 @@ Full operator docs: [`README.md`](./README.md).
 
 ## Architecture rules
 
-```mermaid
-flowchart TB
-  subgraph allowed [Allowed dependency direction]
-    Apps[apps/*] --> Pkgs[packages/*]
-    Pkgs --> Contracts[contracts / config]
-    Retrieval[retrieval / extraction / worker] --> Core[core-domain]
-  end
-
-  subgraph forbidden [Forbidden]
-    Core2[core-domain] -.->|no| Nest[framework / HTTP / BullMQ]
-    Pkgs2[packages/*] -.->|no| Apps2[apps/*]
-  end
-```
+Dependency direction is one-way: **apps → packages → contracts/config**, and capability packages may call **core-domain**. Packages never import apps. `core-domain` never imports frameworks, HTTP, BullMQ, or Qdrant.
 
 1. **Do not put ranking / citation / “is this trivial?” policy in MCP or HTTP handlers.** Put it in `core-domain` (or call existing helpers).
 2. **MCP stays thin.** Tool handlers validate contracts and call `retrieval`.
