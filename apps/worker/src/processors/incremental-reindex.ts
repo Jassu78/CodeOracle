@@ -45,10 +45,45 @@ import { queueExtractDecisionsForSourceIds } from "../lib/queue-extraction-jobs.
 import { syncMergedPrsAtCommit } from "../lib/sync-merged-pr-at-commit.js";
 import { finalizeIndexIfComplete } from "./full-index.js";
 
-const execFileAsync = promisify(execFile);
+const execFileCb = promisify(execFile);
+
 const ZERO_SHA = "0000000000000000000000000000000000000000";
-/** Git empty tree — used when `before` is a branch create. */
-const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d6927f25fb579";
+/** Git empty tree — last-resort base when branch-create before=zeros and merge-base fails. */
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d3527f25fb579";
+
+async function execFileAsync(
+  file: string,
+  args: string[],
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv; input?: string } = {},
+): Promise<{ stdout: string; stderr: string }> {
+  if (opts.input === undefined) {
+    const result = await execFileCb(file, args, {
+      cwd: opts.cwd,
+      env: opts.env,
+      encoding: "utf8",
+    });
+    return { stdout: String(result.stdout), stderr: String(result.stderr ?? "") };
+  }
+  // util.promisify(execFile) does not accept `input`; use callback form with stdin.
+  const { spawn } = await import("node:child_process");
+  return await new Promise((resolve, reject) => {
+    const child = spawn(file, args, { cwd: opts.cwd, env: opts.env });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => {
+      stdout += String(d);
+    });
+    child.stderr.on("data", (d) => {
+      stderr += String(d);
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve({ stdout, stderr });
+      else reject(new Error(`${file} ${args.join(" ")} exited ${code}: ${stderr}`));
+    });
+    child.stdin.end(opts.input);
+  });
+}
 
 export type IncrementalReindexResult = {
   skipped?: boolean;
@@ -164,6 +199,7 @@ export async function runIncrementalReindex(opts: {
       env: opts.env,
       repoRoot,
       githubFullName: repo.githubFullName,
+      defaultBranch: repo.defaultBranch,
       beforeSha,
       afterSha,
       isLocal: Boolean(repo.localClonePath),
@@ -337,11 +373,63 @@ export async function runIncrementalReindex(opts: {
   } catch (err) {
     await opts.db.update(repos).set({ indexStatus: "error" }).where(eq(repos.id, repoId));
     await clearIndexRun(opts.redis, repoId);
+    const message = err instanceof Error ? err.message : String(err);
     await finishJobHistory(opts.db, jobHistoryId, {
       status: "error",
       latencyMs: Date.now() - started,
+      errorMessage: message.slice(0, 2000),
     });
     throw err;
+  }
+}
+
+/**
+ * Branch-create webhooks send before=zeros. Diffing the empty tree often fails
+ * (object missing in shallow clones) and GitHub compare rejects that base.
+ * Prefer default-branch…after (branch delta); else materialize empty tree locally.
+ */
+export async function resolveIncrementalCompareBase(opts: {
+  repoRoot: string;
+  defaultBranch: string;
+  beforeSha: string;
+  afterSha: string;
+}): Promise<string> {
+  if (opts.beforeSha !== ZERO_SHA) return opts.beforeSha;
+
+  for (const tip of [`origin/${opts.defaultBranch}`, opts.defaultBranch]) {
+    try {
+      const { stdout } = await execFileAsync(
+        "git",
+        ["merge-base", tip, opts.afterSha],
+        { cwd: opts.repoRoot },
+      );
+      const base = stdout.trim();
+      if (base) return base;
+    } catch {
+      // try next tip
+    }
+  }
+
+  return ensureEmptyTreeObject(opts.repoRoot);
+}
+
+async function ensureEmptyTreeObject(repoRoot: string): Promise<string> {
+  try {
+    await execFileAsync("git", ["rev-parse", "--verify", `${EMPTY_TREE}^{tree}`], {
+      cwd: repoRoot,
+    });
+    return EMPTY_TREE;
+  } catch {
+    // Materialize an empty tree object (oid is stable across git versions when stdin is empty).
+    const { stdout } = await execFileAsync("git", ["hash-object", "-t", "tree", "--stdin"], {
+      cwd: repoRoot,
+      input: "",
+    });
+    const oid = stdout.trim();
+    if (!/^[0-9a-f]{40}$/.test(oid)) {
+      throw new Error(`git hash-object empty tree produced invalid oid: ${oid}`);
+    }
+    return oid;
   }
 }
 
@@ -349,6 +437,7 @@ async function resolveFileChanges(opts: {
   env: Env;
   repoRoot: string;
   githubFullName: string;
+  defaultBranch: string;
   beforeSha: string;
   afterSha: string;
   isLocal: boolean;
@@ -358,7 +447,9 @@ async function resolveFileChanges(opts: {
       const [owner, name] = opts.githubFullName.split("/");
       if (owner && name) {
         const octokit = new Octokit({ auth: opts.env.GITHUB_PAT });
-        const base = opts.beforeSha === ZERO_SHA ? EMPTY_TREE : opts.beforeSha;
+        // Branch create: compare against default branch tip, not the empty tree.
+        const base =
+          opts.beforeSha === ZERO_SHA ? opts.defaultBranch : opts.beforeSha;
         const { data } = await octokit.rest.repos.compareCommits({
           owner,
           repo: name,
@@ -378,7 +469,12 @@ async function resolveFileChanges(opts: {
     }
   }
 
-  const base = opts.beforeSha === ZERO_SHA ? EMPTY_TREE : opts.beforeSha;
+  const base = await resolveIncrementalCompareBase({
+    repoRoot: opts.repoRoot,
+    defaultBranch: opts.defaultBranch,
+    beforeSha: opts.beforeSha,
+    afterSha: opts.afterSha,
+  });
   const { stdout } = await execFileAsync(
     "git",
     ["diff", "--name-status", "-z", base, opts.afterSha],
