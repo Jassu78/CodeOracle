@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { applyHybridCutoff, fuseRrf } from "../src/hybrid-rrf.js";
+import {
+  applyHybridCutoff,
+  dualChannelPrimaryCap,
+  fuseRrf,
+} from "../src/hybrid-rrf.js";
 
 describe("fuseRrf", () => {
   it("scores dual-channel hits above single-channel", () => {
@@ -21,6 +25,15 @@ describe("fuseRrf", () => {
   });
 });
 
+describe("dualChannelPrimaryCap", () => {
+  it("leaves half the limit for backfill", () => {
+    expect(dualChannelPrimaryCap(5)).toBe(2);
+    expect(dualChannelPrimaryCap(3)).toBe(1);
+    expect(dualChannelPrimaryCap(10)).toBe(5);
+    expect(dualChannelPrimaryCap(1)).toBe(1);
+  });
+});
+
 describe("applyHybridCutoff", () => {
   const hits = fuseRrf([
     { channel: "dense", ids: ["both", "dense-only", "dense-tail"] },
@@ -30,7 +43,6 @@ describe("applyHybridCutoff", () => {
   it("keeps dual-channel hits when minChannels=2", () => {
     const cut = applyHybridCutoff(hits, { limit: 10, minChannels: 2, relativeFloor: 0 });
     expect(cut.some((h) => h.id === "both")).toBe(true);
-    expect(cut.every((h) => h.id !== "sparse-only" || h.channels.length >= 1)).toBe(true);
   });
 
   it("backfills dense-only when dual-channel leaves slots (Q1)", () => {
@@ -48,6 +60,42 @@ describe("applyHybridCutoff", () => {
     expect(cut.map((h) => h.id)).toContain("github-signature");
     expect(cut.some((h) => h.id.startsWith("readme"))).toBe(true);
     expect(cut.length).toBeLessThanOrEqual(3);
+  });
+
+  it("caps dual share so code can appear in hit@3 (Q1 live HMAC shape)", () => {
+    // Three strong dual doc chunks + mid dual code (failed dual floor) — mirrors
+    // live R1 where github-signature is dual but below dualFloor.
+    const fused = [
+      { id: "readme-a", score: 0.583, channels: ["dense", "sparse"] as const },
+      { id: "readme-b", score: 0.476, channels: ["dense", "sparse"] as const },
+      { id: "readme-c", score: 0.375, channels: ["dense", "sparse"] as const },
+      { id: "github-signature", score: 0.237, channels: ["dense", "sparse"] as const },
+      { id: "sparse-noise", score: 0.2, channels: ["sparse"] as const },
+    ];
+    const cut = applyHybridCutoff(fused, {
+      limit: 5,
+      minChannels: 2,
+      relativeFloor: 0.5,
+      backfillSingleChannel: true,
+    });
+    const top3 = cut.slice(0, 3).map((h) => h.id);
+    expect(top3).toContain("github-signature");
+    expect(top3.filter((id) => id.startsWith("readme")).length).toBeLessThanOrEqual(2);
+  });
+
+  it("prefers weak dual backfill before sparse-only", () => {
+    const fused = [
+      { id: "both", score: 0.6, channels: ["dense", "sparse"] as const },
+      { id: "weak-dual", score: 0.22, channels: ["dense", "sparse"] as const },
+      { id: "sparse-noise", score: 0.2, channels: ["sparse"] as const },
+    ];
+    const cut = applyHybridCutoff(fused, {
+      limit: 2,
+      minChannels: 2,
+      relativeFloor: 0.5,
+      backfillSingleChannel: true,
+    });
+    expect(cut.map((h) => h.id)).toEqual(["both", "weak-dual"]);
   });
 
   it("prefers dense-only backfill before sparse-only", () => {
