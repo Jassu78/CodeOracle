@@ -14,3 +14,8 @@ Sparse vectors are local bag-of-tokens (`textToSparseVector`); Qdrant applies `i
 **Hybrid relevance floor:** dense and sparse channels are queried separately; dense honors `scoreThreshold` (cosine). Results are fused with Reciprocal Rank Fusion in `@codeoracle/core-domain`, then a post-fusion cutoff prefers dual-channel hits, drops ranks below 50% of the dual-channel top score, and **backfills** dense-only (then sparse-only) hits under a global RRF floor so prose that wins both channels cannot entirely hide dense-only code. Falls back to single-channel if nothing is dual-channel.
 
 **Activate hybrid on an existing dogfood index:** run a **full** reindex (recreates the chunks collection). Incremental upserts write sparse when the collection is already hybrid.
+
+## `find_decision`
+
+Dense topic search over `decisions`, then hydrate + citation filter. Results are cut with a **relative score floor** (default keep `score ≥ topScore × 0.85`) and a **display limit** of 3 so absolute cosine thresholds do not return a long tail of adjacent-but-weaker decisions. Qdrant fetch is wider than the display limit. No reindex required for this policy.
+
