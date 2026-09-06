@@ -7,7 +7,10 @@
  *
  * When `minChannels` is 2 (hybrid default), dual-channel hits are preferred
  * but **capped** so prose agreement cannot fill the entire top-K; remaining
- * slots backfill weak dual / dense-only / sparse-only (Q1).
+ * slots backfill **dense-only first**, then weak dual, then sparse-only (Q1).
+ * Weak dual (below the primary relative floor) must not outrank dense-only
+ * implementation hits — that failure class regenerates docs-only top-K for NL
+ * “where is X implemented?” queries when symbols miss the sparse channel.
  */
 
 export type RetrievalChannel = "dense" | "sparse";
@@ -95,12 +98,16 @@ function isSparseOnly(h: FusedHit): boolean {
 }
 
 /**
- * Backfill priority: weak dual (agreement that missed the primary floor) →
- * dense-only → sparse-only; then score desc; then id.
+ * Backfill priority (candidates are never strong dual — those are head/deferred):
+ * dense-only → weak dual (missed primary floor) → sparse-only; then score desc; then id.
+ *
+ * Dense-only before weak dual: NL “where is X implemented?” often puts prose on
+ * both channels weakly while the true impl is dense-strong / sparse-miss. Letting
+ * weak dual docs beat dense-only code recreates docs-only top-K (Q1 R1 class).
  */
 function compareBackfill(a: FusedHit, b: FusedHit): number {
   const rank = (h: FusedHit) =>
-    isDualChannel(h) ? 0 : isDenseOnly(h) ? 1 : isSparseOnly(h) ? 2 : 3;
+    isDenseOnly(h) ? 0 : isDualChannel(h) ? 1 : isSparseOnly(h) ? 2 : 3;
   return rank(a) - rank(b) || b.score - a.score || a.id.localeCompare(b.id);
 }
 

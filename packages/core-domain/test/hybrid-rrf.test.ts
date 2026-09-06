@@ -98,6 +98,34 @@ describe("applyHybridCutoff", () => {
     expect(cut.map((h) => h.id)).toEqual(["both", "weak-dual"]);
   });
 
+  it("prefers dense-only backfill before weak dual (Q1 R1 class)", () => {
+    // Strong dual docs fill primary; weak dual prose + dense-only impl compete for
+    // backfill — impl must win (general: dense-strong/sparse-miss code).
+    const fused = [
+      { id: "doc-strong-a", score: 0.583, channels: ["dense", "sparse"] as const },
+      { id: "doc-strong-b", score: 0.343, channels: ["dense", "sparse"] as const },
+      { id: "src-related-dual", score: 0.292, channels: ["dense", "sparse"] as const },
+      { id: "impl-dense-only", score: 0.25, channels: ["dense"] as const },
+      { id: "doc-weak-dual", score: 0.15, channels: ["dense", "sparse"] as const },
+      { id: "sparse-noise", score: 0.333, channels: ["sparse"] as const },
+    ];
+    const cut = applyHybridCutoff(fused, {
+      limit: 5,
+      minChannels: 2,
+      relativeFloor: 0.5,
+      backfillSingleChannel: true,
+    });
+    expect(cut.map((h) => h.id)).toContain("impl-dense-only");
+    const implIdx = cut.findIndex((h) => h.id === "impl-dense-only");
+    const weakDocIdx = cut.findIndex((h) => h.id === "doc-weak-dual");
+    expect(implIdx).toBeGreaterThanOrEqual(0);
+    if (weakDocIdx >= 0) {
+      expect(implIdx).toBeLessThan(weakDocIdx);
+    }
+    // hit@3 after path diversity still needs impl early among unique intents
+    expect(cut.slice(0, 4).map((h) => h.id)).toContain("impl-dense-only");
+  });
+
   it("prefers dense-only backfill before sparse-only", () => {
     const fused = fuseRrf([
       { channel: "dense", ids: ["both", "dense-code"] },
