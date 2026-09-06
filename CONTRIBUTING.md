@@ -169,11 +169,13 @@ See the ER diagram and table notes in [`README.md` § Schemas](./README.md#schem
 | MCP I/O shape | `packages/contracts` + mcp-server tests if handlers change |
 | Job orchestration | worker unit tests and/or e2e |
 | Search quality regression lock | golden queries (`test/golden-queries`) if you change retrieval policy |
+| Live NL / product-index regression | update or add a suite under `test/replay/suites/` + dogfood `codeoracle replay` (not a substitute for goldens) |
 
 ### Integration / eval
 
 - E2e and golden eval need Compose services; see `test/e2e/README.md` and `test/golden-queries/README.md`.
 - Do not lower golden thresholds to “make CI green” without documenting the product trade-off.
+- Live `codeoracle replay` is dogfood/ops only (real index + embeddings). CI covers replay **scoring + suite schema** via `@codeoracle/cli` unit tests — see `test/replay/README.md`.
 
 ---
 

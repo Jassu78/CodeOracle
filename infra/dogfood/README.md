@@ -50,6 +50,8 @@ pnpm --filter @codeoracle/cli exec tsx src/main.ts decisions alts-audit <repoId>
 # After retrieval changes: live quality suite (any ready repo; suite is data)
 pnpm --filter @codeoracle/cli exec tsx src/main.ts replay <repoId> \
   --suite test/replay/suites/codeoracle-self.json
+# exit 0 ⇒ hard gates pass (soft misses printed). Not a GitHub Actions gate —
+# CI covers goldens + replay schema/score units only (see test/replay/README.md).
 ```
 
 CLI note: do **not** insert an extra `--` between `pnpm … start` and `decisions` (Commander treats it badly). Prefer `pnpm --filter @codeoracle/cli exec tsx src/main.ts …`.
