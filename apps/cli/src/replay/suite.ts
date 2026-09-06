@@ -3,7 +3,7 @@ import { z } from "zod";
 const GateSchema = z.enum(["hard", "soft"]).default("hard");
 
 const SearchExpectSchema = z.object({
-  /** At least one top hit's filePath must contain one of these substrings. */
+  /** At least one top hit's filePath **or** symbolName must contain one of these substrings. */
   anyOfPathIncludes: z.array(z.string().min(1)).min(1),
   hitAt: z.number().int().positive().max(50).default(3),
 });

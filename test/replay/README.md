@@ -57,7 +57,7 @@ No ranking shortcuts live here. Suites never encode hostnames or dogfood-only po
 
 - **`gate: "hard"`** — failure → non-zero exit (default).  
 - **`gate: "soft"`** — printed, does not fail the run (stretch cases).  
-- **`anyOfPathIncludes`** — at least one result in hit@K has `filePath` containing one of the strings (works across repo layouts).  
+- **`anyOfPathIncludes`** — at least one result in hit@K has `filePath` **or** `symbolName` containing one of the strings (works across repo layouts; symbols catch `authorize*` in differently named files).  
 - **`maxCount`** — upper bound on find_decision result length (bleed guard).
 
 ## Commands

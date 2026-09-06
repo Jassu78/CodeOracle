@@ -26,6 +26,21 @@ describe("scoreReplaySearch", () => {
     );
     expect(r.passed).toBe(false);
   });
+
+  it("matches symbolName when path lacks the needle (R4 authorize class)", () => {
+    const r = scoreReplaySearch(
+      [
+        { filePath: "README.md" },
+        {
+          filePath: "apps/mcp-server/src/transport/http.ts",
+          symbolName: "authorizeMcpBearerToken",
+        },
+      ],
+      { anyOfPathIncludes: ["auth.ts", "authorize"], hitAt: 3 },
+    );
+    expect(r.passed).toBe(true);
+    expect(r.detail).toMatch(/authorize/);
+  });
 });
 
 describe("scoreReplayFind", () => {

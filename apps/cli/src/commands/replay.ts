@@ -82,7 +82,13 @@ export async function runReplay(
           query: c.query,
           topK: Math.max(c.expect.hitAt, 5),
         });
-        const scored = scoreReplaySearch(out.results, c.expect);
+        const scored = scoreReplaySearch(
+          out.results.map((r) => ({
+            filePath: r.filePath,
+            symbolName: r.symbolName,
+          })),
+          c.expect,
+        );
         scores.push({
           id: c.id,
           tool: c.tool,
