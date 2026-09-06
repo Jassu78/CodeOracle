@@ -17,6 +17,24 @@ const DEFAULT_EXCLUDES = [
   ".next/",
   "vendor/",
   "__pycache__/",
+  // Lockfiles — lexical dumps of the whole dependency graph; pollute hybrid search.
+  "pnpm-lock.yaml",
+  "package-lock.json",
+  "yarn.lock",
+  "bun.lock",
+  "bun.lockb",
+  "Cargo.lock",
+  "poetry.lock",
+  "composer.lock",
+  "Gemfile.lock",
+  // ORM machine output (schema snapshots / generated migration SQL).
+  "**/drizzle/meta/",
+  "**/drizzle/**/*.sql",
+  "**/prisma/migrations/",
+  "**/*_snapshot.json",
+  // Eval / golden fixtures that embed the queries themselves (self-hit pollution).
+  "**/replay/suites/",
+  "**/golden-queries/**/queries.json",
 ];
 
 /** Paths that must never be indexed even if not gitignored. */
@@ -125,6 +143,13 @@ async function walkUntracked(rootDir: string, ig: Ignore): Promise<string[]> {
   return out.sort();
 }
 
+/**
+ * List text files to index under a repo root.
+ *
+ * Filters: root `.gitignore` + hard excludes (build dirs, lockfiles, ORM meta,
+ * eval suite JSON, secrets) + binary extensions + size cap. Hard excludes apply
+ * even when files are git-tracked — they are index-noise classes, not “this repo”.
+ */
 export async function listSourceFiles(rootDir: string): Promise<string[]> {
   const gitignorePatterns = await loadGitignorePatterns(rootDir);
   const ig = buildIgnoreMatcher(gitignorePatterns);
