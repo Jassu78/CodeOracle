@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "description": "Minimal example suite — replace path substrings with paths that exist in your indexed repo.",
+  "cases": [
+    {
+      "id": "search-example",
+      "tool": "search_codebase",
+      "query": "replace with a natural-language implementation question",
+      "gate": "hard",
+      "expect": {
+        "anyOfPathIncludes": ["example-impl.ts"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "find-example",
+      "tool": "find_decision",
+      "query": "replace with a decision topic",
+      "gate": "hard",
+      "expect": {
+        "maxCount": 3,
+        "topicOrSummaryIncludesAny": ["example"],
+        "requireCitationHttp": true
+      }
+    }
+  ]
+}

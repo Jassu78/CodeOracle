@@ -46,6 +46,10 @@ pnpm --filter @codeoracle/cli exec tsx src/main.ts decisions extract <repoId> --
 
 pnpm --filter @codeoracle/cli exec tsx src/main.ts decisions alts-audit <repoId> --show
 # exit 0 ⇒ inconsistent ≈ 0
+
+# After retrieval changes: live quality suite (any ready repo; suite is data)
+pnpm --filter @codeoracle/cli exec tsx src/main.ts replay <repoId> \
+  --suite test/replay/suites/codeoracle-self.json
 ```
 
 CLI note: do **not** insert an extra `--` between `pnpm … start` and `decisions` (Commander treats it badly). Prefer `pnpm --filter @codeoracle/cli exec tsx src/main.ts …`.

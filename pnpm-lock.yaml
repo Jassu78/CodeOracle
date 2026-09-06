@@ -120,6 +120,9 @@ importers:
       '@codeoracle/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@codeoracle/gateway':
+        specifier: workspace:*
+        version: link:../../packages/gateway
       '@codeoracle/queue':
         specifier: workspace:*
         version: link:../../packages/queue
@@ -138,6 +141,9 @@ importers:
       picocolors:
         specifier: ^1.1.1
         version: 1.1.1
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       tsup:
         specifier: ^8.3.5
