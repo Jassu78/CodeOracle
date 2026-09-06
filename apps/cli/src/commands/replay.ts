@@ -80,7 +80,8 @@ export async function runReplay(
           embed,
           repoId,
           query: c.query,
-          topK: Math.max(c.expect.hitAt, 5),
+          // Final display size = hit@K; searchCodebase already over-fetches before diversify.
+          topK: c.expect.hitAt,
         });
         const scored = scoreReplaySearch(
           out.results.map((r) => ({
