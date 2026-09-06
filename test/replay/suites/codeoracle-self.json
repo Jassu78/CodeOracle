@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "description": "Self-repo regression suite for Jassu78/CodeOracle (Q1/Q2 live gates). Portable engine; this file is product-repo data only.",
+  "cases": [
+    {
+      "id": "R1-soft-hmac-nl",
+      "tool": "search_codebase",
+      "query": "where do we verify GitHub webhook HMAC signatures",
+      "gate": "hard",
+      "expect": {
+        "anyOfPathIncludes": ["github-signature.ts"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "R2-hmac-keyword",
+      "tool": "search_codebase",
+      "query": "verifyGitHubSignature X-Hub-Signature-256",
+      "gate": "hard",
+      "expect": {
+        "anyOfPathIncludes": ["github-signature.ts"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "R3-token-budget",
+      "tool": "search_codebase",
+      "query": "EXTRACT_REPO_DAILY_TOKEN_BUDGET token budget",
+      "gate": "hard",
+      "expect": {
+        "anyOfPathIncludes": ["extract-token-budget.ts"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "R4-soft-auth-nl",
+      "tool": "search_codebase",
+      "query": "where do we scope per-repo API tokens",
+      "gate": "soft",
+      "expect": {
+        "anyOfPathIncludes": ["auth.ts", "authorize"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "R5-doc-webhook",
+      "tool": "search_codebase",
+      "query": "how do I configure the GitHub webhook",
+      "gate": "hard",
+      "expect": {
+        "anyOfPathIncludes": ["README"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "D1-find-hmac",
+      "tool": "find_decision",
+      "query": "GitHub webhook HMAC signature verification",
+      "gate": "hard",
+      "expect": {
+        "maxCount": 3,
+        "topicOrSummaryIncludesAny": ["hmac", "webhook", "signature"],
+        "requireCitationHttp": true
+      }
+    },
+    {
+      "id": "D2-find-budget",
+      "tool": "find_decision",
+      "query": "extract daily token budget",
+      "gate": "hard",
+      "expect": {
+        "maxCount": 3,
+        "topicOrSummaryIncludesAny": ["token", "budget"],
+        "requireCitationHttp": true
+      }
+    },
+    {
+      "id": "D3-find-hybrid",
+      "tool": "find_decision",
+      "query": "hybrid dense sparse RRF search",
+      "gate": "hard",
+      "expect": {
+        "maxCount": 3,
+        "topicOrSummaryIncludesAny": ["hybrid", "rrf", "sparse"],
+        "requireCitationHttp": true
+      }
+    },
+    {
+      "id": "D4-find-auth",
+      "tool": "find_decision",
+      "query": "principal-scoped API authentication tokens",
+      "gate": "hard",
+      "expect": {
+        "maxCount": 3,
+        "topicOrSummaryIncludesAny": ["auth", "token", "principal", "scoped"],
+        "requireCitationHttp": true
+      }
+    }
+  ]
+}

@@ -19,13 +19,15 @@
     "@codeoracle/contracts": "workspace:*",
     "@codeoracle/core-domain": "workspace:*",
     "@codeoracle/db": "workspace:*",
+    "@codeoracle/gateway": "workspace:*",
     "@codeoracle/queue": "workspace:*",
     "@codeoracle/retrieval": "workspace:*",
     "@codeoracle/worker": "workspace:*",
     "@clack/prompts": "^0.11.0",
     "commander": "^13.0.0",
     "drizzle-orm": "^0.45.2",
-    "picocolors": "^1.1.1"
+    "picocolors": "^1.1.1",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "tsup": "^8.3.5",

@@ -6,6 +6,7 @@ import { runDoctor } from "./commands/doctor.js";
 import { runDecisionsAltsAudit, runDecisionsExtract, runDecisionsFailures, runDecisionsReview } from "./commands/decisions.js";
 import { runInit } from "./commands/init.js";
 import { runMcpConfig } from "./commands/mcp-config.js";
+import { runReplay } from "./commands/replay.js";
 import { runRepoIndex, runRepoRecover, runRepoRegister, runRepoStatus } from "./commands/repo.js";
 
 const program = new Command();
@@ -144,6 +145,20 @@ decisions
       clear: Boolean(opts.clear),
       limit: Number.isFinite(opts.limit) ? opts.limit : undefined,
     });
+  });
+
+program
+  .command("replay")
+  .description(
+    "Run a live-index quality suite (search + find_decision) against any ready repo. See test/replay/README.md.",
+  )
+  .argument("<repoId>", "Repo UUID from `repo register`")
+  .requiredOption(
+    "--suite <path>",
+    "Suite JSON path (relative to repo root or absolute). Example: test/replay/suites/example.json",
+  )
+  .action(async (repoId: string, opts: { suite: string }) => {
+    await runReplay(repoId, { suite: opts.suite });
   });
 
 program.parse();
