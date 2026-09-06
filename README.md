@@ -332,7 +332,7 @@ PRs need lint, typecheck, unit tests, Compose smoke, integration e2e, and golden
 
 **Live index replay (any ready repo):** suite JSON + `codeoracle replay <repoId> --suite test/replay/suites/….json` — see [`test/replay/README.md`](./test/replay/README.md). Complements fixture `pnpm test:eval`; does not replace it. **CI** runs golden eval + replay unit/schema tests; **dogfood** runs live product-repo replay (not GitHub Actions).
 
-**Honest limits:** soft NL search can prefer docs over symbols; decision list quality depends on embeddings + ranking floors; extraction tracks chat-model and PR prose quality. Empty alternatives are often honest (source named no option).
+**Honest limits:** soft NL search can prefer docs over symbols; decision list quality depends on embeddings + ranking floors; extraction tracks chat-model and PR prose quality. Empty alternatives are often honest (source named no option). Indexing skips lockfiles, ORM meta/migrations, and eval suite JSON by default — full reindex after changing crawler excludes.
 
 ---
 

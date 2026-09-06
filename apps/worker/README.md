@@ -11,3 +11,15 @@ BullMQ consumers for `chunk_file`, `embed_chunks`, `extract_decisions`, and `inc
   - A Redis key (`codeoracle:worker:leader`) still exists as an **advisory** marker (first replica to start logs `isLeader: true`) reserved for any future singleton-only task — it does **not** block additional workers from starting.
 - Cap dogfood extract volume with `EXTRACT_QUEUE_LIMIT` (full index) or `pnpm co decisions extract <repoId> --limit 10`.
 - **Push while indexing:** `incremental_reindex` defers to Redis (`codeoracle:deferred-push:<repoId>`, tip coalesce). When the repo returns to `ready`, one catch-up incremental is flushed. Extract re-queue never removes **active** BullMQ jobs (lock-safe).
+
+## What gets indexed
+
+`listSourceFiles` walks git-tracked (or filesystem) paths, applying root `.gitignore` plus **hard excludes** that apply even when files are tracked:
+
+- Build / VCS noise (`node_modules/`, `dist/`, `.git/`, …)
+- Lockfiles (`pnpm-lock.yaml`, `package-lock.json`, `Cargo.lock`, …)
+- ORM machine output (`**/drizzle/meta/`, `**/drizzle/**/*.sql`, `**/prisma/migrations/`, `**/*_snapshot.json`)
+- Eval fixtures that embed queries (`**/replay/suites/`, `**/golden-queries/**/queries.json`)
+- Secrets denylist (`.env`, keys, …) and binary extensions
+
+Changing excludes requires a **full reindex** — incremental will not delete already-embedded noise points.
