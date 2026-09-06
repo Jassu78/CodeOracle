@@ -170,8 +170,8 @@ export async function searchSimilarChunks(
       { channel: "sparse", ids: sparseIds },
     ]);
 
-    // Prefer dual-channel agreement; backfill dense-only (then sparse-only)
-    // so docs that win both channels cannot hide dense-only code (Q1).
+    // Prefer dual-channel agreement; strong dense-only (≥ dual floor) compete in
+    // the primary band; then backfill dense-only / weak dual / sparse-only (Q1/R4).
     const cut = applyHybridCutoff(fused, {
       limit,
       minChannels: 2,

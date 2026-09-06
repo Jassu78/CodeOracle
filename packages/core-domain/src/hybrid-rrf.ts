@@ -5,12 +5,16 @@
  * channel still applies at prefetch time; this module drops weak fused ranks
  * after merge so hybrid results don't silently ignore a relevance floor.
  *
- * When `minChannels` is 2 (hybrid default), dual-channel hits are preferred
- * but **capped** so prose agreement cannot fill the entire top-K; remaining
- * slots backfill **dense-only first**, then weak dual, then sparse-only (Q1).
- * Weak dual (below the primary relative floor) must not outrank dense-only
- * implementation hits — that failure class regenerates docs-only top-K for NL
- * “where is X implemented?” queries when symbols miss the sparse channel.
+ * When `minChannels` is 2 (hybrid default):
+ * - **Primary band:** dual-channel hits above the dual relative floor, plus
+ *   dense-only hits that clear that same floor (strong dense-only), merged by
+ *   RRF score. Dual count in the head is capped (`dualChannelPrimaryCap`) so
+ *   prose agreement cannot fill every slot.
+ * - **Backfill:** remaining dense-only → weak dual → sparse-only (Q1).
+ *
+ * Strong dense-only must compete in the primary band: otherwise a mid dual
+ * (lower RRF than a dense-#1/#2 impl) occupies head slots and NL authorize
+ * queries miss hit@3 (Q1 R4 gold class).
  */
 
 export type RetrievalChannel = "dense" | "sparse";
@@ -71,9 +75,8 @@ export type HybridCutoffOpts = {
    * Default 0.5 — cuts the long tail of single-channel bottom ranks.
    *
    * Floors (when minChannels ≥ 2 with backfill):
-   * - Dual-channel primary pool: vs **dual-channel** top score
+   * - Dual-channel + strong dense-only primary band: vs **dual-channel** top × relativeFloor
    * - Single-channel backfill: vs **max single-channel RRF** `1/(RRF_K+1)` × relativeFloor
-     (not vs global top — dual-channel scores are ~2× single-channel)
    * - Weak dual (failed primary floor): eligible for backfill with no extra floor
    */
   relativeFloor?: number;
@@ -111,15 +114,19 @@ function compareBackfill(a: FusedHit, b: FusedHit): number {
   return rank(a) - rank(b) || b.score - a.score || a.id.localeCompare(b.id);
 }
 
-/** Max dual-channel share before backfill so docs cannot own all of top-K. */
+function compareByScore(a: FusedHit, b: FusedHit): number {
+  return b.score - a.score || a.id.localeCompare(b.id);
+}
+
+/** Max dual-channel share in the primary head so docs cannot own all of top-K. */
 export function dualChannelPrimaryCap(limit: number): number {
   return Math.max(1, Math.floor(limit / 2));
 }
 
 /**
  * Post-fusion relevance floor: channel agreement + drop bottom ranks, then cap.
- * With minChannels≥2 and backfill (default), dual-channel wins first (capped),
- * then weak dual / dense-only / sparse-only fill remaining slots.
+ * Primary band = strong duals ∪ strong dense-only (both ≥ dualFloor), by score,
+ * with a cap on dual count; then backfill remaining slots.
  */
 export function applyHybridCutoff(hits: FusedHit[], opts: HybridCutoffOpts): FusedHit[] {
   if (hits.length === 0 || opts.limit <= 0) return [];
@@ -136,7 +143,6 @@ export function applyHybridCutoff(hits: FusedHit[], opts: HybridCutoffOpts): Fus
 
   const dual = hits.filter(isDualChannel);
   if (dual.length === 0) {
-    // No agreement anywhere — fall back to any channel under global floor.
     const topScore = hits[0]!.score;
     const floor = topScore * relativeFloor;
     return hits.filter((h) => h.score >= floor).slice(0, opts.limit);
@@ -144,27 +150,38 @@ export function applyHybridCutoff(hits: FusedHit[], opts: HybridCutoffOpts): Fus
 
   const dualTop = dual[0]!.score;
   const dualFloor = dualTop * relativeFloor;
-  const primary = dual.filter((h) => h.score >= dualFloor);
+  const strongDual = dual.filter((h) => h.score >= dualFloor);
+  const strongDenseOnly = hits.filter((h) => isDenseOnly(h) && h.score >= dualFloor);
 
   if (!backfill) {
-    return primary.slice(0, opts.limit);
+    return strongDual.slice(0, opts.limit);
   }
 
-  // Cap dual share so multiple doc chunks that agree on both channels cannot
-  // fill every slot before dense-preferred code is considered (Q1 live miss).
   const dualCap = dualChannelPrimaryCap(opts.limit);
-  const head = primary.slice(0, Math.min(dualCap, opts.limit));
-  const taken = new Set(head.map((h) => h.id));
-  // Strong duals beyond the cap are deferred — do not let them re-enter
-  // backfill ahead of weak dual / dense-only code.
-  const deferredPrimary = new Set(primary.map((h) => h.id));
+  const primaryBand = [...strongDual, ...strongDenseOnly].sort(compareByScore);
 
-  // Max RRF for an id seen on exactly one channel at rank 0.
+  const head: FusedHit[] = [];
+  let dualsInHead = 0;
+  for (const h of primaryBand) {
+    if (head.length >= opts.limit) break;
+    if (isDualChannel(h)) {
+      if (dualsInHead >= dualCap) continue;
+      dualsInHead += 1;
+    }
+    head.push(h);
+  }
+
+  const taken = new Set(head.map((h) => h.id));
+  // Strong duals not seated (dual cap) — restore only if backfill cannot fill.
+  const deferredStrongDual = new Set(
+    strongDual.filter((h) => !taken.has(h.id)).map((h) => h.id),
+  );
+
   const singleChannelCap = 1 / (RRF_K + 1);
   const backfillFloor = singleChannelCap * relativeFloor;
 
   const candidates = hits
-    .filter((h) => !taken.has(h.id) && !deferredPrimary.has(h.id))
+    .filter((h) => !taken.has(h.id) && !deferredStrongDual.has(h.id))
     .filter((h) => (isDualChannel(h) ? true : h.score >= backfillFloor))
     .sort(compareBackfill);
 
@@ -174,9 +191,8 @@ export function applyHybridCutoff(hits: FusedHit[], opts: HybridCutoffOpts): Fus
     out.push(h);
   }
 
-  // If backfill could not fill, restore remaining strong dual (capped-out).
   if (out.length < opts.limit) {
-    for (const h of primary) {
+    for (const h of strongDual) {
       if (out.length >= opts.limit) break;
       if (taken.has(h.id)) continue;
       if (out.some((x) => x.id === h.id)) continue;

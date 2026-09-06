@@ -33,12 +33,22 @@
       }
     },
     {
-      "id": "R4-soft-auth-nl",
+      "id": "R4-soft-token-store",
       "tool": "search_codebase",
       "query": "where do we scope per-repo API tokens",
       "gate": "soft",
       "expect": {
-        "anyOfPathIncludes": ["auth.ts", "authorize", "api-tokens"],
+        "anyOfPathIncludes": ["api-tokens"],
+        "hitAt": 3
+      }
+    },
+    {
+      "id": "R4-gold-authorize",
+      "tool": "search_codebase",
+      "query": "where do we authorize per-repo API token access",
+      "gate": "hard",
+      "expect": {
+        "anyOfPathIncludes": ["auth.ts", "authorizeForRepo"],
         "hitAt": 3
       }
     },

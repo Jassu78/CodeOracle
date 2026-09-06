@@ -140,6 +140,31 @@ describe("applyHybridCutoff", () => {
     expect(cut.map((h) => h.id)).toEqual(["both", "dense-code"]);
   });
 
+  it("seats strong dense-only in the primary band by score (Q1 R4 gold class)", () => {
+    // Live gold authorize dump: dual neighbor + sparse main outrank a dense-#1
+    // auth chunk in display because duals alone filled the head — even when the
+    // dense-only RRF beat later duals. Strong dense-only (≥ dualFloor) must compete.
+    const fused = [
+      { id: "http-dual", score: 0.5, channels: ["dense", "sparse"] as const },
+      { id: "main-sparse", score: 0.383, channels: ["sparse"] as const },
+      { id: "auth-dense", score: 0.333, channels: ["dense"] as const },
+      { id: "readme-dual", score: 0.31, channels: ["dense", "sparse"] as const },
+      { id: "tokens-dual", score: 0.277, channels: ["dense", "sparse"] as const },
+    ];
+    const cut = applyHybridCutoff(fused, {
+      limit: 8,
+      minChannels: 2,
+      relativeFloor: 0.5,
+      backfillSingleChannel: true,
+    });
+    expect(cut.slice(0, 3).map((h) => h.id)).toContain("auth-dense");
+    const authIdx = cut.findIndex((h) => h.id === "auth-dense");
+    const tokensIdx = cut.findIndex((h) => h.id === "tokens-dual");
+    expect(authIdx).toBeGreaterThanOrEqual(0);
+    expect(tokensIdx).toBeGreaterThanOrEqual(0);
+    expect(authIdx).toBeLessThan(tokensIdx);
+  });
+
   it("can disable backfill to restore dual-only-when-non-empty", () => {
     const fused = fuseRrf([
       { channel: "dense", ids: ["readme", "code"] },
