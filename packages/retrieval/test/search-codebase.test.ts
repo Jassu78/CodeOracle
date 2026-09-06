@@ -120,7 +120,7 @@ describe("searchCodebase", () => {
     );
   });
 
-  it("diversifies by filePath so duplicate docs cannot fill topK (Q1)", async () => {
+  it("diversifies by filePath with doc quota so docs cannot fill topK (Q1/R4)", async () => {
     const ids = [
       "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -155,10 +155,11 @@ describe("searchCodebase", () => {
       deps: { search, getByIds },
     });
 
+    // Unique paths in rank order → doc quota maxDocs=1 → code before second README.
     expect(out.results.map((r) => r.filePath)).toEqual([
       "apps/api/README.md",
-      "README.md",
       "apps/api/src/webhooks/github-signature.ts",
+      "README.md",
     ]);
   });
 });

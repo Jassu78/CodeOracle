@@ -1,7 +1,7 @@
 import { isCitationUrl } from "@codeoracle/core-domain";
 import type { ReplayFindCase, ReplaySearchCase } from "./suite.js";
 
-export type SearchHitLike = { filePath: string };
+export type SearchHitLike = { filePath: string; symbolName?: string | null };
 export type FindHitLike = { topic: string; summary: string; sourceUrl: string };
 
 export type CaseScore = {
@@ -12,9 +12,17 @@ export type CaseScore = {
   detail: string;
 };
 
+function hitMatchesNeedle(hit: SearchHitLike, needle: string): boolean {
+  const n = needle.toLowerCase();
+  if (hit.filePath.toLowerCase().includes(n)) return true;
+  const sym = hit.symbolName?.toLowerCase() ?? "";
+  return sym.length > 0 && sym.includes(n);
+}
+
 /**
- * hit@K with path **substring** match — portable across repo layouts
- * (unlike fixture goldens which use exact relative paths).
+ * hit@K with path **or symbol** substring match — portable across repo layouts
+ * (unlike fixture goldens which use exact relative paths). Symbols matter for
+ * NL “where do we authorize…” when the verb lives in the identifier, not the filename.
  */
 export function scoreReplaySearch(
   results: SearchHitLike[],
@@ -22,15 +30,17 @@ export function scoreReplaySearch(
 ): { passed: boolean; detail: string } {
   const hitAt = expect.hitAt;
   const top = results.slice(0, hitAt);
-  const paths = top.map((r) => r.filePath);
+  const labels = top.map((r) =>
+    r.symbolName ? `${r.filePath}::${r.symbolName}` : r.filePath,
+  );
   const matched = expect.anyOfPathIncludes.find((want) =>
-    paths.some((p) => p.includes(want)),
+    top.some((h) => hitMatchesNeedle(h, want)),
   );
   return {
     passed: Boolean(matched),
     detail: matched
-      ? `hit@${hitAt}: path contains "${matched}" in [${paths.join(", ") || "(empty)"}]`
-      : `miss@${hitAt}: wanted path containing one of [${expect.anyOfPathIncludes.join(", ")}], got [${paths.join(", ") || "(empty)"}]`,
+      ? `hit@${hitAt}: path/symbol contains "${matched}" in [${labels.join(", ") || "(empty)"}]`
+      : `miss@${hitAt}: wanted path/symbol containing one of [${expect.anyOfPathIncludes.join(", ")}], got [${labels.join(", ") || "(empty)"}]`,
   };
 }
 

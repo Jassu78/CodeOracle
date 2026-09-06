@@ -41,8 +41,11 @@ export function searchFetchLimit(topK: number): number {
 /**
  * Semantic code search for MCP `search_codebase`.
  * Embed → Qdrant (repo-scoped; hybrid RRF + post-fusion cutoff when collection
- * supports sparse) → Postgres hydrate → filePath diversity → citation → Zod.
- * No LLM.
+ * supports sparse) → Postgres hydrate → filePath diversity with doc quota →
+ * citation → Zod. No LLM.
+ *
+ * Doc quota: when source hits remain in the over-fetch pool, documentation
+ * paths cannot consume every display slot (Q1 R4 — dual-channel docs monopoly).
  */
 export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCodebaseOutput> {
   const query = opts.query.trim();

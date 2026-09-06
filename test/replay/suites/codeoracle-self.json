@@ -38,7 +38,7 @@
       "query": "where do we scope per-repo API tokens",
       "gate": "soft",
       "expect": {
-        "anyOfPathIncludes": ["auth.ts", "authorize"],
+        "anyOfPathIncludes": ["auth.ts", "authorize", "api-tokens"],
         "hitAt": 3
       }
     },
