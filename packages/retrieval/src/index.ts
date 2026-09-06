@@ -1,3 +1,4 @@
+export * from "./chunk-index-text.js";
 export * from "./store/qdrant.js";
 export * from "./store/decisions.js";
 export * from "./sparse-embed.js";

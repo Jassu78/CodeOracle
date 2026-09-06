@@ -6,7 +6,7 @@ import type { ProvidersConfig } from "@codeoracle/contracts";
 import { chunks, finishJobHistory, markChunksEmbeddingStatus, startJobHistory, type Database } from "@codeoracle/db";
 import { ProviderRegistry } from "@codeoracle/gateway";
 import { logProviderUsage } from "@codeoracle/observability";
-import { createQdrantClient, ensureChunksCollection, upsertChunkVectors } from "@codeoracle/retrieval";
+import { createQdrantClient, chunkIndexText, ensureChunksCollection, upsertChunkVectors } from "@codeoracle/retrieval";
 import type IORedis from "ioredis";
 import { finalizeIndexIfComplete } from "./full-index.js";
 import { markFileComplete } from "../lib/index-progress.js";
@@ -62,7 +62,14 @@ export async function runEmbedChunks(opts: {
     let embedded = 0;
     for (let i = 0; i < rows.length; i += embedBatch) {
       const batch = rows.slice(i, i + embedBatch);
-      const embedResult = await gateway.embed(batch.map((b) => b.content));
+      const indexTexts = batch.map((b) =>
+        chunkIndexText({
+          filePath: b.filePath,
+          symbolName: b.symbolName,
+          content: b.content,
+        }),
+      );
+      const embedResult = await gateway.embed(indexTexts);
       if (embedResult.vectors.length !== batch.length) {
         throw new Error(
           `Embedding count mismatch: expected ${batch.length}, got ${embedResult.vectors.length}`,
@@ -78,7 +85,7 @@ export async function runEmbedChunks(opts: {
         batch.map((row, idx) => ({
           id: row.id,
           vector: embedResult.vectors[idx]!,
-          sparseText: row.content,
+          sparseText: indexTexts[idx]!,
           payload: {
             repo_id: opts.payload.repoId,
             file_path: row.filePath,
