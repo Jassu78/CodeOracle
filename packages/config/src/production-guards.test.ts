@@ -126,6 +126,31 @@ describe("production guards", () => {
       assertProductionSafety(env, { bindHosts: ["0.0.0.0"], bindKind: "api" }),
     ).not.toThrow();
   });
+
+  it("refuses placeholder API_TOKEN in production even on non-loopback (F3)", () => {
+    const env = loadEnv({
+      ...validBase,
+      NODE_ENV: "production",
+      API_TOKEN: DEV_SECRET_PLACEHOLDER,
+    } as NodeJS.ProcessEnv);
+    expect(() =>
+      assertProductionSafety(env, { bindHosts: ["0.0.0.0"], bindKind: "api" }),
+    ).toThrow(ProductionSafetyError);
+    expect(() =>
+      assertProductionSafety(env, { bindHosts: ["127.0.0.1"], bindKind: "api" }),
+    ).toThrow(ProductionSafetyError);
+  });
+
+  it("refuses placeholder MCP_HTTP_BEARER_TOKEN in production (F3)", () => {
+    const env = loadEnv({
+      ...validBase,
+      NODE_ENV: "production",
+      MCP_HTTP_BEARER_TOKEN: `  ${DEV_SECRET_PLACEHOLDER}  `,
+    } as NodeJS.ProcessEnv);
+    expect(() =>
+      assertProductionSafety(env, { bindHosts: ["0.0.0.0"], bindKind: "mcp" }),
+    ).toThrow(ProductionSafetyError);
+  });
 });
 
 describe("CODEORACLE_ALLOWED_ROOTS", () => {
