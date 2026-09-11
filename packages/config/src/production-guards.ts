@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import type { Env } from "./env.js";
 
@@ -98,6 +99,7 @@ export function assertProductionSafety(env: Env, opts: ProductionSafetyOpts = {}
 
 /**
  * Parse CODEORACLE_ALLOWED_ROOTS (comma-separated absolute or relative roots).
+ * Lexical resolve only — realpath happens in `assertLocalClonePathAllowed`.
  */
 export function parseAllowedRoots(raw: string | readonly string[] | undefined): string[] {
   if (raw == null) return [];
@@ -118,11 +120,28 @@ export class AllowedRootsError extends Error {
   }
 }
 
+function realpathOrThrow(label: string, path: string): string {
+  try {
+    return realpathSync(path);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new AllowedRootsError(`cannot realpath ${label} ${path}: ${detail}`);
+  }
+}
+
+function isPathUnderRoot(candidateReal: string, rootReal: string): boolean {
+  return (
+    candidateReal === rootReal ||
+    candidateReal.startsWith(rootReal.endsWith(sep) ? rootReal : rootReal + sep)
+  );
+}
+
 /**
  * Jail local clone/register paths under CODEORACLE_ALLOWED_ROOTS.
- * - roots empty + non-production → allow (dev ergonomics)
+ * - roots empty + non-production → allow (dev ergonomics); returns realpath when possible
  * - roots empty + production → refuse (fail closed)
- * - roots set → path must equal a root or live under it (no .. escape)
+ * - roots set → both roots and candidate are `realpath`'d (blocks symlink escape), then
+ *   path must equal a root or live under it
  */
 export function assertLocalClonePathAllowed(
   localPath: string,
@@ -138,20 +157,24 @@ export function assertLocalClonePathAllowed(
           "This is a clone-root jail — it does not replace the P0-A secret path denylist.",
       );
     }
-    return absPath;
+    try {
+      return realpathSync(absPath);
+    } catch {
+      return absPath;
+    }
   }
 
-  const underRoot = allowedRoots.some((root) => {
-    const r = resolve(root);
-    return absPath === r || absPath.startsWith(r.endsWith(sep) ? r : r + sep);
-  });
+  const realRoots = allowedRoots.map((root) => realpathOrThrow("allowed root", resolve(root)));
+  const realPath = realpathOrThrow("local path", absPath);
+
+  const underRoot = realRoots.some((rootReal) => isPathUnderRoot(realPath, rootReal));
 
   if (!underRoot) {
     throw new AllowedRootsError(
-      `local path ${absPath} is outside CODEORACLE_ALLOWED_ROOTS ` +
-        `(${allowedRoots.join(", ")}).`,
+      `local path ${realPath} is outside CODEORACLE_ALLOWED_ROOTS ` +
+        `(${realRoots.join(", ")}).`,
     );
   }
 
-  return absPath;
+  return realPath;
 }

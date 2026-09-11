@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { loadEnv } from "./env.js";
 import {
   AllowedRootsError,
@@ -16,6 +19,21 @@ const validBase = {
   REDIS_URL: "redis://localhost:6379",
   QDRANT_URL: "http://localhost:6333",
 };
+
+const tempDirs: string[] = [];
+
+function makeTempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  while (tempDirs.length > 0) {
+    const dir = tempDirs.pop();
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 describe("production guards", () => {
   it("treats unset API_HOST as all-interfaces for safety", () => {
@@ -132,18 +150,62 @@ describe("CODEORACLE_ALLOWED_ROOTS", () => {
   });
 
   it("jails paths under configured roots and rejects prefix siblings", () => {
-    const roots = parseAllowedRoots(["/tmp/allowed"]);
+    const base = makeTempDir("co-roots-");
+    const allowed = join(base, "allowed");
+    const evilSibling = join(base, "allowed-evil");
+    const other = join(base, "other");
+    mkdirSync(join(allowed, "repo"), { recursive: true });
+    mkdirSync(join(evilSibling, "repo"), { recursive: true });
+    mkdirSync(join(other, "repo"), { recursive: true });
+
+    const roots = parseAllowedRoots([allowed]);
     expect(() =>
-      assertLocalClonePathAllowed("/tmp/allowed/repo", roots, { nodeEnv: "production" }),
+      assertLocalClonePathAllowed(join(allowed, "repo"), roots, { nodeEnv: "production" }),
     ).not.toThrow();
     expect(() =>
-      assertLocalClonePathAllowed("/tmp/allowed-evil/repo", roots, { nodeEnv: "production" }),
+      assertLocalClonePathAllowed(join(evilSibling, "repo"), roots, { nodeEnv: "production" }),
     ).toThrow(AllowedRootsError);
     expect(() =>
-      assertLocalClonePathAllowed("/tmp/other/repo", roots, { nodeEnv: "production" }),
+      assertLocalClonePathAllowed(join(other, "repo"), roots, { nodeEnv: "development" }),
     ).toThrow(AllowedRootsError);
     expect(() =>
-      assertLocalClonePathAllowed("/tmp/allowed/../other", roots, { nodeEnv: "development" }),
+      assertLocalClonePathAllowed(join(allowed, "..", "other", "repo"), roots, {
+        nodeEnv: "development",
+      }),
     ).toThrow(AllowedRootsError);
+  });
+
+  it("refuses symlink escape under an allowed root (F1)", () => {
+    const base = makeTempDir("co-jail-");
+    const allowed = join(base, "allowed");
+    const outside = join(base, "outside");
+    mkdirSync(allowed, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(outside, "secret.txt"), "nope");
+
+    const escapeLink = join(allowed, "escape");
+    symlinkSync(outside, escapeLink);
+
+    const roots = parseAllowedRoots([allowed]);
+    expect(() =>
+      assertLocalClonePathAllowed(escapeLink, roots, { nodeEnv: "production" }),
+    ).toThrow(AllowedRootsError);
+
+    // Lexical path looks inside the jail; realpath must still refuse.
+    const lexical = join(allowed, "escape");
+    expect(lexical.startsWith(allowed)).toBe(true);
+    expect(() =>
+      assertLocalClonePathAllowed(lexical, roots, { nodeEnv: "development" }),
+    ).toThrow(AllowedRootsError);
+  });
+
+  it("returns realpath for an in-jail directory", () => {
+    const base = makeTempDir("co-ok-");
+    const allowed = join(base, "allowed");
+    const repo = join(allowed, "repo");
+    mkdirSync(repo, { recursive: true });
+    const roots = parseAllowedRoots([allowed]);
+    const out = assertLocalClonePathAllowed(repo, roots, { nodeEnv: "production" });
+    expect(out).toBe(realpathSync(repo));
   });
 });
