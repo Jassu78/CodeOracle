@@ -1,3 +1,4 @@
+import { extname } from "node:path";
 import Parser from "tree-sitter";
 // tree-sitter-typescript ships two grammars in one package: .typescript and .tsx
 import TypeScript from "tree-sitter-typescript";
@@ -108,7 +109,10 @@ export const typescriptPlugin: LanguagePlugin = {
     // Cast needed: tree-sitter-typescript's published types lag its peer
     // `tree-sitter` version (see CHANGELOG.md decision log — flagged, not
     // silently ignored). Verified at runtime by the passing boundary tests.
-    const grammar = (filePath.endsWith(".tsx") ? TypeScript.tsx : TypeScript.typescript) as unknown as Parser.Language;
+    // Case-folded: registry routes .TSX case-insensitively; grammar must match.
+    const grammar = (
+      extname(filePath).toLowerCase() === ".tsx" ? TypeScript.tsx : TypeScript.typescript
+    ) as unknown as Parser.Language;
     parser.setLanguage(grammar);
     const tree = parser.parse(source);
     return extractChunks(filePath, tree, source);

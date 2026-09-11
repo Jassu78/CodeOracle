@@ -32,6 +32,29 @@ describe("markdownPlugin", () => {
     expect(chunks.map((c) => c.symbolName)).toEqual([null, "Real Title"]);
   });
 
+  it("skips whitespace-only ATX titles", () => {
+    expect(findAtxHeadings("##   \n# Real\n").map((h) => h.title)).toEqual(["Real"]);
+  });
+
+  it("strips CommonMark closing hash sequences from titles", () => {
+    expect(findAtxHeadings("# Foo ##\n").map((h) => h.title)).toEqual(["Foo"]);
+    expect(findAtxHeadings("## Bar ###\n").map((h) => h.title)).toEqual(["Bar"]);
+  });
+
+  it("sets parentSymbol from the nearest lower-depth heading", () => {
+    const source = ["# A", "a", "## B", "b", "### C", "c", "## D", "d", "# E", "e", ""].join(
+      "\n",
+    );
+    const chunks = markdownPlugin.chunk("nest.md", source).filter((c) => c.symbolName);
+    expect(chunks.map((c) => [c.symbolName, c.parentSymbol])).toEqual([
+      ["A", null],
+      ["B", "A"],
+      ["C", "B"],
+      ["D", "A"],
+      ["E", null],
+    ]);
+  });
+
   it("ignores ATX-looking lines inside fenced code", () => {
     const source = ["Before", "", "```", "# Fake", "code", "```", "", "# Real", "ok", ""].join(
       "\n",
@@ -67,6 +90,17 @@ describe("textPlugin", () => {
     expect(chunks[0]!.language).toBe("text");
     expect(chunks[0]!.content).toContain("para one.");
     expect(chunks[0]!.content).toContain("para three.");
+  });
+
+  it("flushes when cumulative paragraphs exceed the soft target", () => {
+    const a = "a".repeat(1000);
+    const b = "b".repeat(1000);
+    const source = `${a}\n\n${b}\n`;
+    const chunks = textPlugin.chunk("split.txt", source);
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0]!.content).toContain("a");
+    expect(chunks[1]!.content).toContain("b");
+    expect(chunks[0]!.byteEnd).toBeLessThanOrEqual(chunks[1]!.byteStart);
   });
 
   it("covers full source for long unbroken text", () => {

@@ -30,6 +30,9 @@ function pushChunk(
 /**
  * Paragraph-aware chunking for plain prose (.txt / .rst / .adoc).
  * Merges blank-line paragraphs up to a soft size; hard-caps with overlap.
+ *
+ * Limitation: `.rst` / `.adoc` are treated as prose paragraphs only — RST
+ * underline headings and AsciiDoc `=` section markers are not section boundaries.
  */
 export const textPlugin: LanguagePlugin = {
   language: "text",

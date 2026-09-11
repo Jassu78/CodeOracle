@@ -72,3 +72,23 @@ describe("typescriptPlugin — chunk boundary correctness", () => {
     }
   });
 });
+
+describe("typescriptPlugin — case-insensitive .tsx grammar", () => {
+  const jsxSource = [
+    "export function Icon() {",
+    "  return <span />;",
+    "}",
+    "",
+    "export function Page() {",
+    "  return <Icon />;",
+    "}",
+    "",
+  ].join("\n");
+
+  it("extracts JSX symbols for .tsx and .TSX the same way", () => {
+    const lower = typescriptPlugin.chunk("Icon.tsx", jsxSource).map((c) => c.symbolName).sort();
+    const upper = typescriptPlugin.chunk("Icon.TSX", jsxSource).map((c) => c.symbolName).sort();
+    expect(lower).toEqual(["Icon", "Page"]);
+    expect(upper).toEqual(lower);
+  });
+});
