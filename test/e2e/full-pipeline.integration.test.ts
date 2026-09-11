@@ -205,9 +205,10 @@ describe.skipIf(!integrationEnabled)("full pipeline: index → embed → extract
           // The fake provider's embedding is a crude bag-of-words proxy (word
           // overlap), not real semantic similarity — a single-word query
           // against a multi-sentence decision naturally scores lower than
-          // production's default 0.45 would allow. Lower for this fixture
-          // only; production callers use the real default.
+          // production's default 0.45 / P0-B absolute floor 0.58 would allow.
+          // Lower both for this fixture only; production callers use defaults.
           scoreThreshold: 0.3,
+          absoluteMinScore: 0.3,
         });
         expect(found.results.length).toBeGreaterThan(0);
         for (const r of found.results) expect(r.sourceUrl).toMatch(/^https:\/\/github\.com\//);
