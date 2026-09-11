@@ -1,10 +1,40 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { applyHybridCutoff, fuseRrf } from "@codeoracle/core-domain";
-import { textToSparseVector, type SparseVector } from "../sparse-embed.js";
+import { textToSparseVector, SPARSE_ENCODER_VERSION, type SparseVector } from "../sparse-embed.js";
 
 export const CHUNKS_COLLECTION = "code_chunks";
 export const DENSE_VECTOR_NAME = "dense";
 export const SPARSE_VECTOR_NAME = "text";
+
+/** Process-lifetime: avoid spamming logs when a repo still needs reindex. */
+const sparseEncoderWarnedRepos = new Set<string>();
+
+function warnIfSparseEncoderMixed(
+  repoId: string,
+  points: Array<{ payload?: Record<string, unknown> | null }>,
+): void {
+  if (sparseEncoderWarnedRepos.has(repoId)) return;
+  let legacy = 0;
+  let mismatched = 0;
+  for (const p of points) {
+    const stamped = p.payload?.sparse_encoder;
+    if (typeof stamped !== "string" || stamped.length === 0) legacy += 1;
+    else if (stamped !== SPARSE_ENCODER_VERSION) mismatched += 1;
+  }
+  if (legacy === 0 && mismatched === 0) return;
+  sparseEncoderWarnedRepos.add(repoId);
+  console.warn(
+    JSON.stringify({
+      component: "qdrant",
+      event: "sparse_encoder_mixed",
+      repoId,
+      expected: SPARSE_ENCODER_VERSION,
+      legacyOrMissing: legacy,
+      mismatched,
+      hint: "full reindex required for BM25-TF sparse (E3)",
+    }),
+  );
+}
 
 export type ChunksCollectionMode = "missing" | "legacy-dense" | "hybrid";
 
@@ -128,14 +158,17 @@ export async function upsertChunkVectors(
     await client.upsert(CHUNKS_COLLECTION, {
       wait: true,
       points: points.map((p) => {
-        const sparse: SparseVector = textToSparseVector(p.sparseText ?? "");
+        const sparse: SparseVector = textToSparseVector(p.sparseText ?? "", { role: "document" });
         return {
           id: p.id,
           vector: {
             [DENSE_VECTOR_NAME]: p.vector,
             [SPARSE_VECTOR_NAME]: sparse,
           },
-          payload: p.payload,
+          payload: {
+            ...p.payload,
+            sparse_encoder: SPARSE_ENCODER_VERSION,
+          },
         };
       }),
     });
@@ -161,6 +194,68 @@ export async function deleteRepoChunkVectors(client: QdrantClient, repoId: strin
       must: [{ key: "repo_id", match: { value: repoId } }],
     },
   });
+}
+
+export type SparseEncoderProbeResult = {
+  sampled: number;
+  expectedVersion: string;
+  legacyOrMissing: number;
+  mismatched: number;
+  /** True when every sampled point stamps the current encoder (or sample empty). */
+  homogeneous: boolean;
+};
+
+/**
+ * Sample hybrid points and detect pre-E3 raw-TF (unstamped) or foreign encoder versions.
+ * Used by ops smoke (`check-hybrid-mode`) so mixed encodings are not silent.
+ */
+export async function probeSparseEncoderHomogeneity(
+  client: QdrantClient,
+  opts: { repoId?: string; sampleSize?: number } = {},
+): Promise<SparseEncoderProbeResult> {
+  const sampleSize = Math.max(1, Math.min(opts.sampleSize ?? 64, 256));
+  const expectedVersion = SPARSE_ENCODER_VERSION;
+  const empty: SparseEncoderProbeResult = {
+    sampled: 0,
+    expectedVersion,
+    legacyOrMissing: 0,
+    mismatched: 0,
+    homogeneous: true,
+  };
+
+  const mode = await getChunksCollectionMode(client);
+  if (mode !== "hybrid") return empty;
+
+  const filter = opts.repoId
+    ? { must: [{ key: "repo_id", match: { value: opts.repoId } }] }
+    : undefined;
+
+  const page = await client.scroll(CHUNKS_COLLECTION, {
+    limit: sampleSize,
+    with_payload: ["sparse_encoder"],
+    with_vector: false,
+    filter,
+  });
+
+  const points = page.points ?? [];
+  let legacyOrMissing = 0;
+  let mismatched = 0;
+  for (const p of points) {
+    const stamped = (p.payload as Record<string, unknown> | null | undefined)?.sparse_encoder;
+    if (typeof stamped !== "string" || stamped.length === 0) {
+      legacyOrMissing += 1;
+    } else if (stamped !== expectedVersion) {
+      mismatched += 1;
+    }
+  }
+
+  return {
+    sampled: points.length,
+    expectedVersion,
+    legacyOrMissing,
+    mismatched,
+    homogeneous: legacyOrMissing === 0 && mismatched === 0,
+  };
 }
 
 /**
@@ -191,7 +286,7 @@ export async function searchSimilarChunks(
   const mode = await getChunksCollectionMode(client);
 
   if (mode === "hybrid" && opts.queryText?.trim()) {
-    const sparse = textToSparseVector(opts.queryText);
+    const sparse = textToSparseVector(opts.queryText, { role: "query" });
     // Prefetch wider than topK so dense-only code can enter fusion/backfill (Q1).
     const prefetchLimit = Math.max(limit * 3, 30);
 
@@ -202,14 +297,18 @@ export async function searchSimilarChunks(
         limit: prefetchLimit,
         score_threshold: scoreThreshold,
         filter,
+        with_payload: ["sparse_encoder"],
       }),
       client.query(CHUNKS_COLLECTION, {
         query: sparse,
         using: SPARSE_VECTOR_NAME,
         limit: prefetchLimit,
         filter,
+        with_payload: ["sparse_encoder"],
       }),
     ]);
+
+    warnIfSparseEncoderMixed(opts.repoId, [...denseResponse.points, ...sparseResponse.points]);
 
     const denseScoreById = new Map(
       denseResponse.points.map((p: { id: string | number; score: number }) => [
