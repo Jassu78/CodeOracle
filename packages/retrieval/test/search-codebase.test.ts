@@ -25,6 +25,11 @@ function row(partial: Partial<ChunkRow> & Pick<ChunkRow, "id" | "filePath" | "co
   };
 }
 
+/** Test hit — evidence defaults to ranking score (legacy dense). */
+function hit(id: string, score: number, evidenceScore = score) {
+  return { id, score, evidenceScore };
+}
+
 const stubDb = {} as never;
 const stubQdrant = {} as never;
 
@@ -77,9 +82,9 @@ describe("searchCodebase", () => {
 
   it("preserves score order and drops rows without filePath", async () => {
     const search = vi.fn(async () => [
-      { id: chunkA, score: 0.9 },
-      { id: noPathId, score: 0.8 },
-      { id: chunkB, score: 0.7 },
+      hit(chunkA, 0.9),
+      hit(noPathId, 0.8),
+      hit(chunkB, 0.7),
     ]);
     const getByIds = vi.fn(async () => [
       row({
@@ -128,10 +133,10 @@ describe("searchCodebase", () => {
       "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
     ];
     const search = vi.fn(async () => [
-      { id: ids[0]!, score: 0.58 },
-      { id: ids[1]!, score: 0.47 },
-      { id: ids[2]!, score: 0.24 },
-      { id: ids[3]!, score: 0.237 },
+      hit(ids[0]!, 0.58),
+      hit(ids[1]!, 0.47),
+      hit(ids[2]!, 0.24),
+      hit(ids[3]!, 0.237, 0.4),
     ]);
     const getByIds = vi.fn(async () => [
       row({ id: ids[0]!, filePath: "apps/api/README.md", content: "doc a" }),
@@ -168,9 +173,9 @@ describe("searchCodebase", () => {
     const okId = "55555555-5555-4555-8555-555555555555";
     const payloadId = "66666666-6666-4666-8666-666666666666";
     const search = vi.fn(async () => [
-      { id: secretId, score: 0.99 },
-      { id: payloadId, score: 0.95 },
-      { id: okId, score: 0.9 },
+      hit(secretId, 0.99),
+      hit(payloadId, 0.95),
+      hit(okId, 0.9),
     ]);
     const getByIds = vi.fn(async () => [
       row({
@@ -203,5 +208,70 @@ describe("searchCodebase", () => {
 
     expect(out.results).toHaveLength(1);
     expect(out.results[0]?.filePath).toBe("src/config/env.ts");
+  });
+
+  it("returns empty when dense evidence is below absolute floor (P0-B)", async () => {
+    const weakA = "77777777-7777-4777-8777-777777777777";
+    const weakB = "88888888-8888-4888-8888-888888888888";
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "asdf qwerty unrelated mush",
+      topK: 5,
+      deps: {
+        search: async () => [hit(weakA, 0.12), hit(weakB, 0.09)],
+        getByIds: async () => [
+          row({ id: weakA, filePath: "apps/a.ts", content: "noise a" }),
+          row({ id: weakB, filePath: "apps/b.ts", content: "noise b" }),
+        ],
+      },
+    });
+    expect(out.results).toEqual([]);
+  });
+
+  it("empties hybrid sparse-only tips even when RRF ranking score looks mid (P0-B)", async () => {
+    const sparseOnly = "99999999-9999-4999-8999-999999999999";
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "nonsense lexical mush",
+      topK: 5,
+      deps: {
+        // RRF single-channel top ≈ 1/3, but no dense evidence.
+        search: async () => [hit(sparseOnly, 1 / 3, 0)],
+        getByIds: async () => [
+          row({ id: sparseOnly, filePath: "apps/noise.ts", content: "lexical noise" }),
+        ],
+      },
+    });
+    expect(out.results).toEqual([]);
+  });
+
+  it("keeps in-domain hits with dense evidence above absolute floor (P0-B)", async () => {
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "verify hmac",
+      topK: 3,
+      deps: {
+        search: async () => [hit(chunkA, 0.5, 0.4)],
+        getByIds: async () => [
+          row({
+            id: chunkA,
+            filePath: "apps/api/src/webhooks/github-signature.ts",
+            content: "export function verifyGitHubSignature() {}",
+            symbolName: "verifyGitHubSignature",
+          }),
+        ],
+      },
+    });
+    expect(out.results).toHaveLength(1);
+    expect(out.results[0]?.filePath).toContain("github-signature.ts");
   });
 });

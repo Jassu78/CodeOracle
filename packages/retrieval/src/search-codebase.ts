@@ -3,12 +3,21 @@ import {
   SearchCodebaseOutputSchema,
   type SearchCodebaseOutput,
 } from "@codeoracle/contracts";
-import { diversifyByFilePath, mustRefuseSecretRetrieval } from "@codeoracle/core-domain";
+import { diversifyByFilePath, mustRefuseSecretRetrieval, SEARCH_ABSOLUTE_SCORE_FLOOR, bestScore } from "@codeoracle/core-domain";
 import { getChunksByIds, type ChunkRow, type Database } from "@codeoracle/db";
 import { searchSimilarChunks } from "./store/qdrant.js";
 import type { EmbedFn } from "./util.js";
 
-export type ChunkSearchHit = { id: string; score: number };
+export type ChunkSearchHit = {
+  id: string;
+  /** Ranking score: RRF for hybrid, dense cosine for legacy dense-only. */
+  score: number;
+  /**
+   * Dense cosine evidence for P0-B absolute floor.
+   * Hybrid sparse-only hits set this to 0; legacy dense sets it equal to `score`.
+   */
+  evidenceScore: number;
+};
 
 export type SearchCodebaseDeps = {
   search: (opts: {
@@ -29,6 +38,12 @@ export type SearchCodebaseOpts = {
   query: string;
   topK?: number;
   scoreThreshold?: number;
+  /**
+   * If the best **dense evidence** score is below this, return no results (P0-B).
+   * Default SEARCH_ABSOLUTE_SCORE_FLOOR (0.35). Hybrid ranking still uses RRF
+   * `score`; absolute no-match uses `evidenceScore` so sparse-only garbage empties.
+   */
+  absoluteMinScore?: number;
   /** Test seam — production callers omit this. */
   deps?: SearchCodebaseDeps;
 };
@@ -41,8 +56,8 @@ export function searchFetchLimit(topK: number): number {
 /**
  * Semantic code search for MCP `search_codebase`.
  * Embed → Qdrant (repo-scoped; hybrid RRF + post-fusion cutoff when collection
- * supports sparse) → Postgres hydrate → filePath diversity with doc quota →
- * citation → Zod. No LLM.
+ * supports sparse) → Postgres hydrate → absolute dense-evidence floor (P0-B) →
+ * filePath diversity with doc quota → citation → Zod. No LLM.
  *
  * Doc quota: when source hits remain in the over-fetch pool, documentation
  * paths cannot consume every display slot (Q1 R4 — dual-channel docs monopoly).
@@ -58,6 +73,7 @@ export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCo
 
   const limit = opts.topK ?? 10;
   const scoreThreshold = opts.scoreThreshold ?? 0.35;
+  const absoluteMinScore = opts.absoluteMinScore ?? SEARCH_ABSOLUTE_SCORE_FLOOR;
   const fetchLimit = searchFetchLimit(limit);
 
   const deps: SearchCodebaseDeps = opts.deps ?? {
@@ -93,6 +109,7 @@ export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCo
   const byId = new Map(rows.map((r) => [r.id, r]));
 
   const hydrated: SearchCodebaseOutput["results"] = [];
+  const evidenceForFloor: Array<{ score: number }> = [];
   for (const hit of hits) {
     const row = byId.get(hit.id);
     if (!row) continue;
@@ -102,6 +119,7 @@ export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCo
     // even if stale vectors remain until full reindex.
     if (mustRefuseSecretRetrieval(filePath, row.content)) continue;
 
+    evidenceForFloor.push({ score: hit.evidenceScore });
     hydrated.push({
       chunkId: row.id,
       filePath,
@@ -110,6 +128,11 @@ export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCo
       score: hit.score,
       repoId: row.repoId,
     });
+  }
+
+  // P0-B: empty when best dense evidence is too weak (sparse-only → evidence 0).
+  if (hydrated.length === 0 || bestScore(evidenceForFloor) < absoluteMinScore) {
+    return SearchCodebaseOutputSchema.parse({ results: [] });
   }
 
   const results = diversifyByFilePath(hydrated, limit);

@@ -4,7 +4,9 @@ import {
   type FindDecisionOutput,
 } from "@codeoracle/contracts";
 import {
+  DECISION_ABSOLUTE_SCORE_FLOOR,
   DECISION_RELATIVE_SCORE_FLOOR,
+  applyAbsoluteTopScoreFloor,
   applyRelativeScoreFloor,
   decisionSearchFetchLimit,
 } from "@codeoracle/core-domain";
@@ -49,6 +51,11 @@ export type FindDecisionOpts = {
    * Default 0.85 — live-tuned so HMAC bleed drops while hybrid near-ties stay.
    */
   relativeFloor?: number;
+  /**
+   * If the best hydrated cosine score is below this, return no results (P0-B).
+   * Default DECISION_ABSOLUTE_SCORE_FLOOR — empties sticky mediocre tips.
+   */
+  absoluteMinScore?: number;
   /** Test seam — production callers omit this. */
   deps?: FindDecisionDeps;
 };
@@ -58,8 +65,8 @@ type ScoredDecision = FindDecisionOutput["results"][number] & { score: number };
 /**
  * Semantic decision lookup for MCP `find_decision`.
  * Embed → Qdrant (repo-scoped) → Postgres hydrate → citation filter →
- * relative score floor vs top hit → display cap → Zod.
- * No LLM in this path.
+ * absolute top-score floor (P0-B) → relative score floor vs top hit →
+ * display cap → Zod. No LLM in this path.
  */
 export async function findDecision(opts: FindDecisionOpts): Promise<FindDecisionOutput> {
   const topic = opts.topic.trim();
@@ -74,6 +81,7 @@ export async function findDecision(opts: FindDecisionOpts): Promise<FindDecision
   const fetchLimit = decisionSearchFetchLimit(displayLimit);
   const scoreThreshold = opts.scoreThreshold ?? 0.45;
   const relativeFloor = opts.relativeFloor ?? DECISION_RELATIVE_SCORE_FLOOR;
+  const absoluteMinScore = opts.absoluteMinScore ?? DECISION_ABSOLUTE_SCORE_FLOOR;
 
   const deps: FindDecisionDeps = opts.deps ?? {
     search: (args) =>
@@ -128,7 +136,8 @@ export async function findDecision(opts: FindDecisionOpts): Promise<FindDecision
     });
   }
 
-  const kept = applyRelativeScoreFloor(scored, { relativeFloor, limit: displayLimit });
+  const absoluteKept = applyAbsoluteTopScoreFloor(scored, { absoluteMin: absoluteMinScore });
+  const kept = applyRelativeScoreFloor(absoluteKept, { relativeFloor, limit: displayLimit });
   const results = kept.map(({ score: _score, ...rest }) => rest);
 
   return FindDecisionOutputSchema.parse({ results });

@@ -17,11 +17,13 @@ Sparse vectors are local bag-of-tokens (`textToSparseVector`); Qdrant applies `i
 
 **Activate hybrid on an existing dogfood index:** run a **full** reindex (recreates the chunks collection). Incremental upserts write sparse when the collection is already hybrid.
 
+**Absolute no-match floor (P0-B):** after hydrate, if the best **dense evidence** score is below `SEARCH_ABSOLUTE_SCORE_FLOOR` (default `0.35`), `search_codebase` returns `{ results: [] }`. Hybrid still ranks with RRF, but sparse-only tips (evidence `0`) empty so lexical nonsense cannot fill top-K. MCP already renders empty as “No code chunks matched…”.
+
 ## Secret refuse (P0-A)
 
 `search_codebase` and `explain_file` refuse dotenv/secret **path classes** (including `.env2`, which `.env.*` miss) and high-confidence secret payloads via `@codeoracle/core-domain` `mustRefuseSecretRetrieval`. Crawl denylist uses the same patterns. After widening the denylist, run a **full** reindex so stale Qdrant points are dropped.
 
 ## `find_decision`
 
-Dense topic search over `decisions`, then hydrate + citation filter. Results are cut with a **relative score floor** (default keep `score ≥ topScore × 0.85`) and a **display limit** of 3 so absolute cosine thresholds do not return a long tail of adjacent-but-weaker decisions. Qdrant fetch is wider than the display limit. No reindex required for this policy.
+Dense topic search over `decisions`, then hydrate + citation filter. Results are cut with an **absolute score floor** (default keep only when top ≥ `0.58`) then a **relative score floor** (default keep `score ≥ topScore × 0.85`) and a **display limit** of 3 so mediocre sticky tips and absolute-threshold tails do not ship. Qdrant fetch is wider than the display limit. No reindex required for this policy.
 
