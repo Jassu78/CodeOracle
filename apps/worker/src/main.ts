@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadEnv, loadProjectEnv, loadProvidersConfig } from "@codeoracle/config";
+import { loadEnv, loadProjectEnv, loadProvidersConfig, assertProductionSafety } from "@codeoracle/config";
 import {
   JOB_NAMES,
   type ChunkFileJobPayload,
@@ -29,6 +29,7 @@ const log = createLogger("worker");
 async function main() {
   loadProjectEnv(projectRoot);
   const env = loadEnv();
+  assertProductionSafety(env);
   const providers = loadProvidersConfig(resolve(projectRoot, env.PROVIDERS_CONFIG_PATH));
 
   const connection = createRedisConnection(env.REDIS_URL);
