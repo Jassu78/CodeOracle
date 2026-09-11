@@ -23,6 +23,8 @@
 | **Repo token** | `api_tokens` row (SHA-256 at rest) | **Only** the `repoId` it was minted for |
 | **Open-dev** | No `API_TOKEN` and zero `api_tokens` rows | All routes (local default) |
 
+**E6 production guards:** when `NODE_ENV=production`, startup refuses compose placeholder secrets (`change-me-in-dev` in `DATABASE_URL` / `GITHUB_WEBHOOK_SECRET`) and refuses an empty `API_TOKEN` if the API binds a non-loopback host (`API_HOST` unset or `0.0.0.0`). Local register paths must be under `CODEORACLE_ALLOWED_ROOTS` in production. These guards do **not** replace the P0-A crawl/search secret path denylist.
+
 Cross-repo use of a repo token → **403**. Missing/invalid bearer when auth is configured → **401**.
 
 ```bash

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { count, eq } from "drizzle-orm";
-import { loadEnv, loadProjectEnv } from "@codeoracle/config";
+import { loadEnv, loadProjectEnv, assertLocalClonePathAllowed, parseAllowedRoots } from "@codeoracle/config";
 import { JOB_NAMES } from "@codeoracle/contracts";
 import {
   chunks,
@@ -33,9 +33,14 @@ export async function runRepoRegister(opts: {
   try {
     if (opts.localPath) {
       const name = opts.name ?? opts.localPath.split("/").pop() ?? "repo";
+      const localClonePath = assertLocalClonePathAllowed(
+        opts.localPath,
+        parseAllowedRoots(env.CODEORACLE_ALLOWED_ROOTS),
+        { nodeEnv: env.NODE_ENV },
+      );
       const { repoId } = await registerLocalRepo(db, {
         name,
-        localClonePath: resolve(opts.localPath),
+        localClonePath,
         branch: opts.branch,
       });
       p.log.success(`Registered local repo ${pc.cyan(`local/${name}`)} → ${repoId}`);
