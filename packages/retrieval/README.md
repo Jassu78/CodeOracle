@@ -25,15 +25,19 @@ Sparse vectors are local bag-of-tokens (`textToSparseVector`); Qdrant applies `i
 
 ## Lexical lane (E1)
 
-`search_codebase` runs Postgres `searchChunksLexical` in parallel with Qdrant hybrid retrieve, then merges. Same MCP tool — no second surface.
+`search_codebase` runs Postgres `searchChunksLexical` in parallel with embed/Qdrant hybrid, then merges. Same MCP tool — no second surface.
 
 | Match | Evidence vs P0-B floor |
 |-------|------------------------|
-| symbol/path exact or path suffix | `1` (keeps result) |
+| symbol/path exact or path suffix (`…/basename`) | `1` (keeps result) |
 | soft symbol | `0.4` |
-| content substring alone | `0` (cannot bypass floor) |
+| content substring | `0` (not queried on hot path in E1) |
 
-**Latency:** lexical is one repo-scoped SQL over-fetch (≤80 rows) + in-process re-rank; expected dogfood p95 add is low tens of ms on indexed repos (no extra embed). Measure with dogfood before tightening SLOs (E5). Lexical unavailable → warn + hybrid-only (fail open for that channel).
+**Access path:** equality + `ILIKE` on `symbol_name` / `file_path` only (repo-scoped). Not a trigram/FTS index yet — fine for dogfood-sized repos; E3/E5 may add FTS. Extension-only queries (`.ts`) do not path-match.
+
+**Merge policy (E1 MVP):** exact lexical kinds sort ahead of hybrid-only ids; soft lexical does not outrank hybrid by kind. Full 3-channel domain RRF is deferred to a follow-up (see architecture doc). Each hydrated hit must clear the absolute evidence floor (weak companions dropped).
+
+**Latency:** lexical starts with embed (no vector dependency); expected add is one small SQL round-trip. Lexical unavailable → structured `lexical_unavailable` warn + hybrid-only.
 
 ## Secret refuse (P0-A)
 

@@ -1,13 +1,13 @@
-import { and, eq, ilike, or, sql } from "drizzle-orm";
+import { and, eq, ilike, or } from "drizzle-orm";
+import {
+  escapeIlikePattern,
+  looksLikeFilePath,
+  normalizeLexicalQuery,
+  scoreLexicalRow,
+  type LexicalMatchKind,
+} from "@codeoracle/core-domain";
 import type { Database } from "../client.js";
 import { chunks } from "../schema/chunks.js";
-
-export type LexicalMatchKind =
-  | "symbol_exact"
-  | "path_exact"
-  | "path_suffix"
-  | "symbol_soft"
-  | "content";
 
 export type LexicalChunkHit = {
   id: string;
@@ -16,83 +16,22 @@ export type LexicalChunkHit = {
   score: number;
 };
 
-function normalizeQuery(raw: string): string {
-  const t = raw.trim();
-  if (t.length >= 2) {
-    const a = t[0];
-    const b = t[t.length - 1];
-    if ((a === '"' && b === '"') || (a === "'" && b === "'") || (a === "`" && b === "`")) {
-      return t.slice(1, -1).trim();
-    }
-  }
-  return t;
-}
-
-function escapeIlike(raw: string): string {
-  return raw.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
-}
-
-function looksLikeFilePath(q: string): boolean {
-  return q.includes("/") || /\.[a-z0-9]{1,8}$/i.test(q);
-}
-
-type ScoredRow = {
-  id: string;
-  filePath: string;
-  symbolName: string | null;
-  content: string;
-};
-
-function scoreRow(row: ScoredRow, q: string): LexicalChunkHit | null {
-  const symbol = row.symbolName?.trim() ?? "";
-  const path = row.filePath.trim();
-  const base = path.includes("/") ? path.slice(path.lastIndexOf("/") + 1) : path;
-
-  if (symbol && symbol === q) {
-    return { id: row.id, matchKind: "symbol_exact", score: 1 };
-  }
-  if (path === q || base === q) {
-    return { id: row.id, matchKind: "path_exact", score: 0.98 };
-  }
-  if (path.endsWith("/" + q) || path.endsWith(q)) {
-    return { id: row.id, matchKind: "path_suffix", score: 0.92 };
-  }
-  if (symbol && symbol.toLowerCase().includes(q.toLowerCase())) {
-    return { id: row.id, matchKind: "symbol_soft", score: 0.75 };
-  }
-  if (q.length >= 3 && row.content.includes(q)) {
-    return { id: row.id, matchKind: "content", score: 0.45 };
-  }
-  return null;
-}
-
 /**
- * Indexed lexical lane over Postgres chunk metadata/body (E1).
- * Repo-scoped. Prefer symbol/path exactness over content mush.
+ * Indexed lexical lane over Postgres chunk **symbol/path** (E1).
+ * Repo-scoped. No content `ILIKE` on the hot path (btree-friendly equality +
+ * bounded path/symbol patterns). Re-rank with shared `scoreLexicalRow`.
  */
 export async function searchChunksLexical(
   db: Database,
   opts: { repoId: string; query: string; limit?: number },
 ): Promise<LexicalChunkHit[]> {
-  const q = normalizeQuery(opts.query);
+  const q = normalizeLexicalQuery(opts.query);
   if (!q || !opts.repoId.trim()) return [];
 
   const limit = Math.max(1, Math.min(opts.limit ?? 20, 50));
-  const pattern = `%${escapeIlike(q)}%`;
+  const pattern = `%${escapeIlikePattern(q)}%`;
   const pathLike = looksLikeFilePath(q);
 
-  const conditions = [
-    eq(chunks.repoId, opts.repoId),
-    or(
-      eq(chunks.symbolName, q),
-      eq(chunks.filePath, q),
-      ilike(chunks.symbolName, pattern),
-      ilike(chunks.filePath, pattern),
-      q.length >= 3 && q.length <= 96 ? ilike(chunks.content, pattern) : sql`false`,
-    ),
-  ];
-
-  const fetchN = Math.min(limit * 4, 80);
   const rows = await db
     .select({
       id: chunks.id,
@@ -101,12 +40,22 @@ export async function searchChunksLexical(
       content: chunks.content,
     })
     .from(chunks)
-    .where(and(...conditions))
-    .limit(fetchN);
+    .where(
+      and(
+        eq(chunks.repoId, opts.repoId),
+        or(
+          eq(chunks.symbolName, q),
+          eq(chunks.filePath, q),
+          ilike(chunks.symbolName, pattern),
+          ilike(chunks.filePath, pattern),
+        ),
+      ),
+    )
+    .limit(Math.min(limit * 4, 80));
 
   const scored: LexicalChunkHit[] = [];
   for (const row of rows) {
-    const hit = scoreRow(row, q);
+    const hit = scoreLexicalRow(row, q);
     if (hit) scored.push(hit);
   }
 

@@ -64,6 +64,11 @@ describe("searchCodebase", () => {
         embed: async () => [[]],
         repoId,
         query: "auth",
+        deps: {
+          search: async () => [],
+          getByIds: async () => [],
+          lexicalSearch: async () => [],
+        },
       }),
     ).rejects.toThrow(/empty vector/);
   });
@@ -349,5 +354,33 @@ describe("searchCodebase", () => {
     });
     expect(out.results).toHaveLength(1);
     expect(out.results[0]?.filePath).toContain("github-signature.ts");
+  });
+
+  it("drops weak hybrid companions when exact lexical clears the floor (E1/F4)", async () => {
+    const exactId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const mushId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "verifyGitHubSignature",
+      topK: 5,
+      deps: {
+        search: async () => [hit(mushId, 0.2, 0.05), hit(exactId, 0.15, 0.1)],
+        lexicalSearch: async () => [{ id: exactId, matchKind: "symbol_exact", score: 1 }],
+        getByIds: async () => [
+          row({
+            id: exactId,
+            filePath: "apps/api/src/webhooks/github-signature.ts",
+            content: "export function verifyGitHubSignature() {}",
+            symbolName: "verifyGitHubSignature",
+          }),
+          row({ id: mushId, filePath: "apps/noise.ts", content: "unrelated" }),
+        ],
+      },
+    });
+    expect(out.results).toHaveLength(1);
+    expect(out.results[0]?.chunkId).toBe(exactId);
   });
 });

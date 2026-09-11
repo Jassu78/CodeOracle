@@ -83,7 +83,11 @@ query
 
 ### E1 absolute-floor rule (resolved)
 
-High-confidence lexical matches (`symbol_exact`, `path_exact`, `path_suffix`) set evidence credit `1` so they clear `SEARCH_ABSOLUTE_SCORE_FLOOR`. Soft symbol uses `0.4`. **Content-only** lexical hits credit `0` and cannot bypass the floor alone (prevents mush). See `lexicalEvidenceForKind` in `@codeoracle/core-domain`.
+High-confidence lexical matches (`symbol_exact`, `path_exact`, `path_suffix` with `/` boundary) set evidence credit `1` so they clear `SEARCH_ABSOLUTE_SCORE_FLOOR`. Soft symbol uses `0.4`. Content is not on the E1 SQL hot path. **Every** hydrated hit must clear the absolute floor (exact lexical does not retain weak hybrid companions).
+
+### E1 fusion policy (MVP amendment)
+
+E1 ships **exact-kind priority + score sort**, not full 3-channel `fuseRrf` yet. Soft lexical never outranks hybrid-only by kind. Promote to domain RRF with `RetrievalChannel = "lexical"` in a follow-up once cutoff rules for three channels are specified.
 
 ---
 
