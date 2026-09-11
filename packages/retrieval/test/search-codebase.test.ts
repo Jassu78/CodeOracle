@@ -274,4 +274,80 @@ describe("searchCodebase", () => {
     expect(out.results).toHaveLength(1);
     expect(out.results[0]?.filePath).toContain("github-signature.ts");
   });
+
+  it("keeps exact lexical symbol hits when dense evidence is weak (E1)", async () => {
+    const exactId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const search = vi.fn(async () => [hit(exactId, 0.2, 0.1)]);
+    const lexicalSearch = vi.fn(async () => [
+      { id: exactId, matchKind: "symbol_exact" as const, score: 1 },
+    ]);
+    const getByIds = vi.fn(async () => [
+      row({
+        id: exactId,
+        filePath: "apps/api/src/webhooks/github-signature.ts",
+        content: "export function verifyGitHubSignature() {}",
+        symbolName: "verifyGitHubSignature",
+      }),
+    ]);
+
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "verifyGitHubSignature",
+      topK: 3,
+      deps: { search, getByIds, lexicalSearch },
+    });
+
+    expect(out.results).toHaveLength(1);
+    expect(out.results[0]?.symbolName).toBe("verifyGitHubSignature");
+    expect(lexicalSearch).toHaveBeenCalled();
+  });
+
+  it("returns empty for garbage when lexical and dense are both weak (E1)", async () => {
+    const mushId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "asdf qwerty unrelated mush",
+      topK: 5,
+      deps: {
+        search: async () => [hit(mushId, 0.1, 0.05)],
+        lexicalSearch: async () => [{ id: mushId, matchKind: "content", score: 0.45 }],
+        getByIds: async () => [
+          row({ id: mushId, filePath: "apps/noise.ts", content: "lexical noise asdf" }),
+        ],
+      },
+    });
+    expect(out.results).toEqual([]);
+  });
+
+  it("surfaces lexical-only path hits with no hybrid results (E1)", async () => {
+    const pathId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "github-signature.ts",
+      topK: 3,
+      deps: {
+        search: async () => [],
+        lexicalSearch: async () => [{ id: pathId, matchKind: "path_suffix", score: 0.92 }],
+        getByIds: async () => [
+          row({
+            id: pathId,
+            filePath: "apps/api/src/webhooks/github-signature.ts",
+            content: "export function verifyGitHubSignature() {}",
+            symbolName: "verifyGitHubSignature",
+          }),
+        ],
+      },
+    });
+    expect(out.results).toHaveLength(1);
+    expect(out.results[0]?.filePath).toContain("github-signature.ts");
+  });
 });

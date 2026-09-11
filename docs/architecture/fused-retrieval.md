@@ -81,9 +81,9 @@ query
 | **Legacy dense collection** | Dense-only query path; no sparse; lexical still OK if Postgres-backed |
 | **Multi-repo** | Every vector/SQL filter includes `repo_id`; E8 scoped clear on full index |
 
-### E1 open point (resolve in E1 PR, not here)
+### E1 absolute-floor rule (resolved)
 
-Absolute floor today keys off **dense evidence**. Strong exact hits with weak/zero dense score must not be wiped incorrectly. Preferred direction: treat high-confidence lexical hits as satisfying “match exists” (bypass or separate floor), without letting sparse mush through. Document the chosen rule + fixtures in E1.
+High-confidence lexical matches (`symbol_exact`, `path_exact`, `path_suffix`) set evidence credit `1` so they clear `SEARCH_ABSOLUTE_SCORE_FLOOR`. Soft symbol uses `0.4`. **Content-only** lexical hits credit `0` and cannot bypass the floor alone (prevents mush). See `lexicalEvidenceForKind` in `@codeoracle/core-domain`.
 
 ---
 

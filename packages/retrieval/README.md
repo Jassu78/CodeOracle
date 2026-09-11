@@ -21,7 +21,19 @@ Sparse vectors are local bag-of-tokens (`textToSparseVector`); Qdrant applies `i
 
 **Multi-repo isolation (E8):** do not call `recreateHybridChunksCollection` from product full-index paths; use `prepareChunksCollectionForFullIndex(client, vectorSize, repoId)`. Decisions already use `deleteRepoDecisionVectors(repoId)`.
 
-**Absolute no-match floor (P0-B):** after hydrate, if the best **dense evidence** score is below `SEARCH_ABSOLUTE_SCORE_FLOOR` (default `0.35`), `search_codebase` returns `{ results: [] }`. Hybrid still ranks with RRF, but sparse-only tips (evidence `0`) empty so lexical nonsense cannot fill top-K. MCP already renders empty as “No code chunks matched…”.
+**Absolute no-match floor (P0-B):** after hydrate, if the best **dense evidence** score is below `SEARCH_ABSOLUTE_SCORE_FLOOR` (default `0.35`), `search_codebase` returns `{ results: [] }`. Hybrid still ranks with RRF, but sparse-only tips (evidence `0`) empty so lexical nonsense cannot fill top-K. MCP already renders empty as “No code chunks matched…”. Exact **symbol/path** lexical hits (E1) credit evidence `1` so they are not wiped by the dense floor; content-only lexical hits do not.
+
+## Lexical lane (E1)
+
+`search_codebase` runs Postgres `searchChunksLexical` in parallel with Qdrant hybrid retrieve, then merges. Same MCP tool — no second surface.
+
+| Match | Evidence vs P0-B floor |
+|-------|------------------------|
+| symbol/path exact or path suffix | `1` (keeps result) |
+| soft symbol | `0.4` |
+| content substring alone | `0` (cannot bypass floor) |
+
+**Latency:** lexical is one repo-scoped SQL over-fetch (≤80 rows) + in-process re-rank; expected dogfood p95 add is low tens of ms on indexed repos (no extra embed). Measure with dogfood before tightening SLOs (E5). Lexical unavailable → warn + hybrid-only (fail open for that channel).
 
 ## Secret refuse (P0-A)
 
