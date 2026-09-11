@@ -21,7 +21,23 @@ Sparse vectors are local bag-of-tokens (`textToSparseVector`); Qdrant applies `i
 
 **Multi-repo isolation (E8):** do not call `recreateHybridChunksCollection` from product full-index paths; use `prepareChunksCollectionForFullIndex(client, vectorSize, repoId)`. Decisions already use `deleteRepoDecisionVectors(repoId)`.
 
-**Absolute no-match floor (P0-B):** after hydrate, if the best **dense evidence** score is below `SEARCH_ABSOLUTE_SCORE_FLOOR` (default `0.35`), `search_codebase` returns `{ results: [] }`. Hybrid still ranks with RRF, but sparse-only tips (evidence `0`) empty so lexical nonsense cannot fill top-K. MCP already renders empty as “No code chunks matched…”.
+**Absolute no-match floor (P0-B):** after hydrate, if the best **dense evidence** score is below `SEARCH_ABSOLUTE_SCORE_FLOOR` (default `0.35`), `search_codebase` returns `{ results: [] }`. Hybrid still ranks with RRF, but sparse-only tips (evidence `0`) empty so lexical nonsense cannot fill top-K. MCP already renders empty as “No code chunks matched…”. Exact **symbol/path** lexical hits (E1) credit evidence `1` so they are not wiped by the dense floor; content-only lexical hits do not.
+
+## Lexical lane (E1)
+
+`search_codebase` runs Postgres `searchChunksLexical` in parallel with embed/Qdrant hybrid, then merges. Same MCP tool — no second surface.
+
+| Match | Evidence vs P0-B floor |
+|-------|------------------------|
+| symbol/path exact or path suffix (`…/basename`) | `1` (keeps result) |
+| soft symbol | `0.4` |
+| content substring | `0` (not queried on hot path in E1) |
+
+**Access path:** equality + `ILIKE` on `symbol_name` / `file_path` only (repo-scoped). Not a trigram/FTS index yet — fine for dogfood-sized repos; E3/E5 may add FTS. Extension-only queries (`.ts`) do not path-match.
+
+**Merge policy (E1 MVP):** exact lexical kinds sort ahead of hybrid-only ids; soft lexical does not outrank hybrid by kind. Full 3-channel domain RRF is deferred to a follow-up (see architecture doc). Each hydrated hit must clear the absolute evidence floor (weak companions dropped).
+
+**Latency:** lexical starts with embed (no vector dependency); expected add is one small SQL round-trip. Lexical unavailable → structured `lexical_unavailable` warn + hybrid-only.
 
 ## Secret refuse (P0-A)
 

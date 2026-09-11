@@ -81,9 +81,13 @@ query
 | **Legacy dense collection** | Dense-only query path; no sparse; lexical still OK if Postgres-backed |
 | **Multi-repo** | Every vector/SQL filter includes `repo_id`; E8 scoped clear on full index |
 
-### E1 open point (resolve in E1 PR, not here)
+### E1 absolute-floor rule (resolved)
 
-Absolute floor today keys off **dense evidence**. Strong exact hits with weak/zero dense score must not be wiped incorrectly. Preferred direction: treat high-confidence lexical hits as satisfying “match exists” (bypass or separate floor), without letting sparse mush through. Document the chosen rule + fixtures in E1.
+High-confidence lexical matches (`symbol_exact`, `path_exact`, `path_suffix` with `/` boundary) set evidence credit `1` so they clear `SEARCH_ABSOLUTE_SCORE_FLOOR`. Soft symbol uses `0.4`. Content is not on the E1 SQL hot path. **Every** hydrated hit must clear the absolute floor (exact lexical does not retain weak hybrid companions).
+
+### E1 fusion policy (MVP amendment)
+
+E1 ships **exact-kind priority + score sort**, not full 3-channel `fuseRrf` yet. Soft lexical never outranks hybrid-only by kind. Promote to domain RRF with `RetrievalChannel = "lexical"` in a follow-up once cutoff rules for three channels are specified.
 
 ---
 

@@ -358,6 +358,9 @@ importers:
       '@codeoracle/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@codeoracle/core-domain':
+        specifier: workspace:*
+        version: link:../core-domain
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(gel@2.2.0)(postgres@3.4.9)
