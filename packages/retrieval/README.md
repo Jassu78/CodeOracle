@@ -2,6 +2,8 @@
 
 Vector store helpers + tool-facing retrieval services.
 
+**Architecture (E0):** see [`docs/architecture/fused-retrieval.md`](../../docs/architecture/fused-retrieval.md) for the fused exact + sparse + dense (+ optional rerank) plan and sequencing.
+
 ## Search modes
 
 | Collection | Mode |
