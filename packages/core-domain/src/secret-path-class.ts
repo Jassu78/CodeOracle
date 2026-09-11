@@ -12,11 +12,13 @@
 /** ignore(7) patterns — hard-deny even when git-tracked. */
 export const SECRET_PATH_IGNORE_PATTERNS: readonly string[] = [
   // Dotenv class: `.env`, `.env2`, `.env.local`, `.env.staging.local`, …
-  // `.env*` is a strict superset of `.env.*` (the latter misses `.env2`).
+  // Prefer precise globs over `.env*` so `.envoy` / `.environment` are not denied.
   ".env",
-  ".env*",
+  ".env.*",
+  ".env[0-9]*",
   "**/.env",
-  "**/.env*",
+  "**/.env.*",
+  "**/.env[0-9]*",
   "**/*.pem",
   "**/*.key",
   "**/id_rsa",
@@ -33,9 +35,11 @@ export const SECRET_PATH_IGNORE_PATTERNS: readonly string[] = [
 /**
  * Basename looks like a dotenv / env-file secret store.
  * Allows product source such as `src/config/env.ts` (no leading `.env`).
+ * Does not treat `.envoy` / `.environment` / `.envrc` as dotenv secrets (F4).
  */
 export function isDotenvSecretBasename(baseName: string): boolean {
-  return /^\.env/i.test(baseName.trim());
+  // `.env` | `.env.<suffix>` | `.env2` / `.env23` …
+  return /^\.env($|\.|[0-9])/i.test(baseName.trim());
 }
 
 /**

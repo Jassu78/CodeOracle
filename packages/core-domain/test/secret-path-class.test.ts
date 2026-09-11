@@ -14,11 +14,17 @@ describe("secret-path-class", () => {
     expect(isDotenvSecretBasename(".env.staging.local")).toBe(true);
     expect(isDotenvSecretBasename("env.ts")).toBe(false);
     expect(isDotenvSecretBasename("environment.ts")).toBe(false);
+    // Not dotenv secret stores (F4) — do not over-deny.
+    expect(isDotenvSecretBasename(".envoy")).toBe(false);
+    expect(isDotenvSecretBasename(".environment")).toBe(false);
+    expect(isDotenvSecretBasename(".envrc")).toBe(false);
 
     expect(isSecretIndexedPath("Chatbot-Api/.env2")).toBe(true);
     expect(isSecretIndexedPath("apps/api/.env")).toBe(true);
     expect(isSecretIndexedPath("src/config/env.ts")).toBe(false);
     expect(isSecretIndexedPath("packages/config/src/env.ts")).toBe(false);
+    expect(isSecretIndexedPath("vendor/.envoy")).toBe(false);
+    expect(isSecretIndexedPath("apps/.environment")).toBe(false);
   });
 
   it("denies key/credential path classes", () => {
