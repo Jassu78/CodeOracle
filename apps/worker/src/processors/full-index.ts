@@ -21,6 +21,7 @@ import { cloneGithubRepo, ensureCloneDir } from "../crawler/github-clone.js";
 import { crawlGithubHistory, crawlLocalGitHistory } from "../crawler/github-history.js";
 import { listSourceFiles, resolveRepoHeadSha } from "../crawler/walk-files.js";
 import { flushDeferredPushToQueue } from "../lib/deferred-push.js";
+import { assertIndexedLocalClonePath } from "../lib/assert-indexed-local-clone-path.js";
 import { beginIndexRun, clearIndexRun, getIndexRunKind, getIndexRunStats, getPendingFileCount } from "../lib/index-progress.js";
 import { queueExtractDecisionsForRepo } from "../lib/queue-extraction-jobs.js";
 
@@ -76,7 +77,7 @@ export async function runFullIndexSetup(opts: {
     let repoRoot: string;
 
     if (isLocal) {
-      repoRoot = repo.localClonePath!;
+      repoRoot = assertIndexedLocalClonePath(opts.env, repo.localClonePath!);
     } else {
       if (!opts.env.GITHUB_PAT) throw new Error("GITHUB_PAT required for GitHub repos");
       await ensureCloneDir(opts.env.CODEORACLE_CLONE_DIR, opts.env.CLONE_MAX_REPOS);
