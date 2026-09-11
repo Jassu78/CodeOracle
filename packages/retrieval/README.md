@@ -11,7 +11,9 @@ Vector store helpers + tool-facing retrieval services.
 | `code_chunks` | **Hybrid** when created via `ensureChunksCollection` / `prepareChunksCollectionForFullIndex` (named `dense` + sparse `text`, RRF). Legacy unnamed dense still searchable (dense-only fallback). |
 | `decisions` | Dense only |
 
-Sparse vectors are local bag-of-tokens (`textToSparseVector`); Qdrant applies `idf` modifier. Tokens hash into a 31-bit index (standard "hashing trick" — see doc comment in `sparse-embed.ts` for the accepted collision trade-off at single-repo scale). Identifiers are split on camelCase / snake_case (and the raw token is kept) so NL queries can overlap symbols. **Query-time** splitting applies immediately; **indexed** sparse vectors pick up the new tokens only after a **full** reindex.
+Sparse vectors use local tokenization (`textToSparseVector`) with **BM25 TF** on documents and raw TF on queries; Qdrant applies `idf` modifier (E3). Tokens hash into a 31-bit index (hashing trick — see `sparse-embed.ts`). Identifiers are split on camelCase / snake_case (raw token kept) so NL queries can overlap symbols. **Query-time** splitting applies immediately; **indexed** sparse weights pick up BM25 (and new tokens) only after a **full** reindex.
+
+**E3 reindex (required):** after deploying `sparse_encoder=bm25-tf-v1`, run a **full** reindex per repo. Mixing pre-E3 raw-TF points with BM25-TF points silently skews sparse ranks — upserts stamp `sparse_encoder` on the payload for ops visibility.
 
 **Chunk index text:** dense embed + sparse both use `chunkIndexText` (path + basename + symbol + body). Payload still stores structured `file_path` / `symbol_name`. Body-only indexing left identifier-heavy modules mid-rank for NL “where do we …” queries; changing this requires a **full** reindex.
 

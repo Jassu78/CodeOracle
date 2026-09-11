@@ -158,7 +158,7 @@ Export path: structured logs today; **E7** OTel later.
 | Stage | On `main` now | Target |
 |-------|---------------|--------|
 | Retrieve | Dense + sparse hybrid RRF | + lexical channel (E1) |
-| Sparse quality | Hash bag + IDF | Real BM25 / better sparse (E3) |
+| Sparse quality | Hash bag + IDF | **E3:** BM25 TF (doc) + Qdrant IDF; full reindex required (`sparse_encoder=bm25-tf-v1`) |
 | Rerank | None | Optional post-fusion (E2) |
 | Floors / refuse | P0-A + P0-B | Keep; extend for lexical (E1) |
 | Isolation | E8 scoped full-index clear | Keep |

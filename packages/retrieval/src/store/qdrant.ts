@@ -1,6 +1,6 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { applyHybridCutoff, fuseRrf } from "@codeoracle/core-domain";
-import { textToSparseVector, type SparseVector } from "../sparse-embed.js";
+import { textToSparseVector, SPARSE_ENCODER_VERSION, type SparseVector } from "../sparse-embed.js";
 
 export const CHUNKS_COLLECTION = "code_chunks";
 export const DENSE_VECTOR_NAME = "dense";
@@ -128,14 +128,17 @@ export async function upsertChunkVectors(
     await client.upsert(CHUNKS_COLLECTION, {
       wait: true,
       points: points.map((p) => {
-        const sparse: SparseVector = textToSparseVector(p.sparseText ?? "");
+        const sparse: SparseVector = textToSparseVector(p.sparseText ?? "", { role: "document" });
         return {
           id: p.id,
           vector: {
             [DENSE_VECTOR_NAME]: p.vector,
             [SPARSE_VECTOR_NAME]: sparse,
           },
-          payload: p.payload,
+          payload: {
+            ...p.payload,
+            sparse_encoder: SPARSE_ENCODER_VERSION,
+          },
         };
       }),
     });
@@ -191,7 +194,7 @@ export async function searchSimilarChunks(
   const mode = await getChunksCollectionMode(client);
 
   if (mode === "hybrid" && opts.queryText?.trim()) {
-    const sparse = textToSparseVector(opts.queryText);
+    const sparse = textToSparseVector(opts.queryText, { role: "query" });
     // Prefetch wider than topK so dense-only code can enter fusion/backfill (Q1).
     const prefetchLimit = Math.max(limit * 3, 30);
 
