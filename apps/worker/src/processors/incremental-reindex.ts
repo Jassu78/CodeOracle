@@ -34,6 +34,7 @@ import {
 import type { Queue } from "bullmq";
 import type IORedis from "ioredis";
 import { cloneGithubRepo, ensureCloneDir } from "../crawler/github-clone.js";
+import { assertIndexedLocalClonePath } from "../lib/assert-indexed-local-clone-path.js";
 import {
   buildIgnoreMatcher,
   isDeniedOrBinary,
@@ -163,7 +164,7 @@ export async function runIncrementalReindex(opts: {
 
     let repoRoot: string;
     if (repo.localClonePath) {
-      repoRoot = repo.localClonePath;
+      repoRoot = assertIndexedLocalClonePath(opts.env, repo.localClonePath);
     } else {
       if (!opts.env.GITHUB_PAT) throw new Error("GITHUB_PAT required for GitHub incremental reindex");
       await ensureCloneDir(opts.env.CODEORACLE_CLONE_DIR, opts.env.CLONE_MAX_REPOS);
