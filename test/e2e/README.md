@@ -11,10 +11,10 @@ pnpm test:integration
 ```
 
 Test files run **sequentially** (`fileParallelism: false` in `vitest.config.ts`)
-— they share one global Qdrant `code_chunks`/`decisions` collection and one
-Redis-backed BullMQ queue against real infra, and a full index destructively
-recreates the hybrid collection (`recreateHybridChunksCollection`), which
-races if two test files run it concurrently.
+— they share Qdrant `code_chunks`/`decisions` and one Redis-backed BullMQ queue
+against real infra. Full index clears **per-repo** chunk vectors when the
+collection is already hybrid (E8); legacy→hybrid still recreates the collection
+once. Keep file parallelism off to avoid job/queue races.
 
 ## full-pipeline.integration.test.ts
 

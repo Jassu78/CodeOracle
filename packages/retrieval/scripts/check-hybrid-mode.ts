@@ -1,6 +1,7 @@
 /**
  * Non-destructive hybrid smoke: report collection mode only.
- * Activating hybrid on dogfood requires a full reindex (recreates collection).
+ * Activating hybrid on dogfood: full reindex via prepareChunksCollectionForFullIndex
+ * (scoped clear when already hybrid; recreate only for legacy-dense).
  */
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";

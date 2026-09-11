@@ -1,14 +1,124 @@
-import { describe, expect, it } from "vitest";
-import { upsertChunkVectors } from "../src/store/qdrant.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  prepareChunksCollectionForFullIndex,
+  upsertChunkVectors,
+} from "../src/store/qdrant.js";
 
 describe("qdrant store", () => {
   it("refuses empty vectors", async () => {
     const client = {
       upsert: async () => ({}),
+      getCollections: async () => ({ collections: [{ name: "code_chunks" }] }),
+      getCollection: async () => ({
+        config: { params: { sparse_vectors: { text: {} } } },
+      }),
     } as never;
 
     await expect(
       upsertChunkVectors(client, [{ id: "x", vector: [], payload: {} }]),
     ).rejects.toThrow(/empty vector/i);
+  });
+});
+
+describe("prepareChunksCollectionForFullIndex (E8)", () => {
+  const repoA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const repoB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+  it("clears only the target repo on an existing hybrid collection", async () => {
+    const deleteCalls: unknown[] = [];
+    const deleteCollection = vi.fn(async () => {
+      throw new Error("deleteCollection must not run for hybrid multi-repo full index");
+    });
+    const client = {
+      getCollections: async () => ({ collections: [{ name: "code_chunks" }] }),
+      getCollection: async () => ({
+        config: { params: { sparse_vectors: { text: {} } } },
+      }),
+      deleteCollection,
+      delete: async (collection: string, body: unknown) => {
+        deleteCalls.push({ collection, body });
+        return {};
+      },
+      createCollection: vi.fn(async () => ({})),
+    };
+
+    const result = await prepareChunksCollectionForFullIndex(client as never, 768, repoA);
+
+    expect(result).toEqual({ action: "cleared-repo", repoId: repoA });
+    expect(deleteCollection).not.toHaveBeenCalled();
+    expect(deleteCalls).toEqual([
+      {
+        collection: "code_chunks",
+        body: {
+          wait: true,
+          filter: {
+            must: [{ key: "repo_id", match: { value: repoA } }],
+          },
+        },
+      },
+    ]);
+
+    await prepareChunksCollectionForFullIndex(client as never, 768, repoB);
+    expect(deleteCollection).not.toHaveBeenCalled();
+    expect(deleteCalls).toHaveLength(2);
+    expect(deleteCalls[1]).toMatchObject({
+      body: {
+        filter: {
+          must: [{ key: "repo_id", match: { value: repoB } }],
+        },
+      },
+    });
+  });
+
+  it("creates a hybrid collection when missing", async () => {
+    const createCollection = vi.fn(async () => ({}));
+    const deleteCollection = vi.fn(async () => ({}));
+    const client = {
+      getCollections: async () => ({ collections: [] }),
+      getCollection: async () => {
+        throw new Error("should not inspect missing collection");
+      },
+      deleteCollection,
+      createCollection,
+      delete: vi.fn(async () => ({})),
+    };
+
+    const result = await prepareChunksCollectionForFullIndex(client as never, 768, repoA);
+    expect(result).toEqual({ action: "created" });
+    expect(createCollection).toHaveBeenCalled();
+    expect(deleteCollection).not.toHaveBeenCalled();
+    expect(client.delete).not.toHaveBeenCalled();
+  });
+
+  it("recreates once when collection is legacy-dense", async () => {
+    let phase: "legacy" | "gone" = "legacy";
+    const createCollection = vi.fn(async () => ({}));
+    const deleteFn = vi.fn(async () => {
+      throw new Error("scoped delete should not run on legacy recreate path");
+    });
+    const client = {
+      getCollections: async () => ({
+        collections: phase === "legacy" ? [{ name: "code_chunks" }] : [],
+      }),
+      getCollection: async () => ({
+        config: { params: {} }, // no sparse_vectors → legacy-dense
+      }),
+      deleteCollection: async () => {
+        phase = "gone";
+      },
+      createCollection,
+      delete: deleteFn,
+    };
+
+    const result = await prepareChunksCollectionForFullIndex(client as never, 384, repoA);
+    expect(result).toEqual({ action: "recreated-from-legacy" });
+    expect(createCollection).toHaveBeenCalled();
+    expect(deleteFn).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty repoId", async () => {
+    await expect(
+      prepareChunksCollectionForFullIndex({} as never, 768, "  "),
+    ).rejects.toThrow(/repoId/);
   });
 });

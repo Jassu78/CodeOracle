@@ -26,7 +26,8 @@ export async function getChunksCollectionMode(client: QdrantClient): Promise<Chu
 
 /**
  * Create hybrid collection (named dense + sparse) when missing.
- * Does not migrate legacy-dense in place — use `recreateHybridChunksCollection` on full index.
+ * Does not migrate legacy-dense in place — full index uses
+ * `prepareChunksCollectionForFullIndex` (scoped clear or one-time legacy recreate).
  */
 export async function ensureChunksCollection(client: QdrantClient, vectorSize: number): Promise<void> {
   const mode = await getChunksCollectionMode(client);
@@ -42,7 +43,55 @@ export async function ensureChunksCollection(client: QdrantClient, vectorSize: n
   });
 }
 
-/** Drop + recreate hybrid collection — call from full index after clearing Postgres chunks. */
+export type PrepareChunksCollectionResult =
+  | { action: "created" }
+  | { action: "cleared-repo"; repoId: string }
+  | { action: "recreated-from-legacy" };
+
+/**
+ * Prepare the shared `code_chunks` collection for a full index of one repo (E8).
+ *
+ * - **missing** → create hybrid collection (other repos unaffected — nothing existed)
+ * - **hybrid** → delete only this repo's points (`repo_id` filter) — leaves other repos intact
+ * - **legacy-dense** → drop + recreate as hybrid (one-time migration; wipes all chunk
+ *   vectors in that collection). Prefer running when only one repo is indexed, or
+ *   reindex every repo afterward.
+ *
+ * Prefer this over `recreateHybridChunksCollection` for product full-index paths.
+ */
+export async function prepareChunksCollectionForFullIndex(
+  client: QdrantClient,
+  vectorSize: number,
+  repoId: string,
+): Promise<PrepareChunksCollectionResult> {
+  const scopedRepoId = repoId.trim();
+  if (!scopedRepoId) {
+    throw new Error("prepareChunksCollectionForFullIndex: repoId must be non-empty");
+  }
+
+  const mode = await getChunksCollectionMode(client);
+
+  if (mode === "missing") {
+    await ensureChunksCollection(client, vectorSize);
+    return { action: "created" };
+  }
+
+  if (mode === "hybrid") {
+    // vectorSize unused: collection already exists; dim changes need intentional ops recreate.
+    await deleteRepoChunkVectors(client, scopedRepoId);
+    return { action: "cleared-repo", repoId: scopedRepoId };
+  }
+
+  // legacy-dense: cannot add sparse in place — recreate hybrid (destructive once).
+  await recreateHybridChunksCollection(client, vectorSize);
+  return { action: "recreated-from-legacy" };
+}
+
+/**
+ * Drop + recreate the entire hybrid collection.
+ * @deprecated Prefer `prepareChunksCollectionForFullIndex` for multi-repo safety.
+ * Kept for ops scripts that intentionally wipe all chunk vectors.
+ */
 export async function recreateHybridChunksCollection(
   client: QdrantClient,
   vectorSize: number,
