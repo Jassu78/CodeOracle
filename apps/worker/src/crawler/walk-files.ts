@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join, relative } from "node:path";
+import { SECRET_PATH_IGNORE_PATTERNS } from "@codeoracle/core-domain";
 import ignore, { type Ignore } from "ignore";
 
 const execFileAsync = promisify(execFile);
@@ -37,23 +38,13 @@ const DEFAULT_EXCLUDES = [
   "**/golden-queries/**/queries.json",
 ];
 
-/** Paths that must never be indexed even if not gitignored. */
-export const SECRET_DENYLIST = [
-  ".env",
-  ".env.*",
-  "**/.env",
-  "**/.env.*",
-  "**/*.pem",
-  "**/*.key",
-  "**/id_rsa",
-  "**/id_rsa.*",
-  "**/credentials.json",
-  "**/secrets.json",
-  "**/secrets.yaml",
-  "**/secrets.yml",
-  ".npmrc",
-  "**/.aws/credentials",
-];
+/**
+ * Paths that must never be indexed even if not gitignored.
+ * Source of truth: `@codeoracle/core-domain` secret path class (P0-A).
+ * Full reindex required after denylist changes — incremental will not drop
+ * already-embedded points for newly denied paths.
+ */
+export const SECRET_DENYLIST = [...SECRET_PATH_IGNORE_PATTERNS];
 
 const BINARY_EXT = new Set([
   ".png",

@@ -3,7 +3,7 @@ import {
   SearchCodebaseOutputSchema,
   type SearchCodebaseOutput,
 } from "@codeoracle/contracts";
-import { diversifyByFilePath, SEARCH_ABSOLUTE_SCORE_FLOOR, bestScore } from "@codeoracle/core-domain";
+import { diversifyByFilePath, mustRefuseSecretRetrieval, SEARCH_ABSOLUTE_SCORE_FLOOR, bestScore } from "@codeoracle/core-domain";
 import { getChunksByIds, type ChunkRow, type Database } from "@codeoracle/db";
 import { searchSimilarChunks } from "./store/qdrant.js";
 import type { EmbedFn } from "./util.js";
@@ -115,6 +115,9 @@ export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCo
     if (!row) continue;
     const filePath = row.filePath?.trim() ?? "";
     if (!filePath) continue; // citation mandatory
+    // P0-A: refuse dotenv/secret path class + high-confidence secret payloads
+    // even if stale vectors remain until full reindex.
+    if (mustRefuseSecretRetrieval(filePath, row.content)) continue;
 
     evidenceForFloor.push({ score: hit.evidenceScore });
     hydrated.push({

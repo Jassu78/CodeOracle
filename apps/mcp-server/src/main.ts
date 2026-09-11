@@ -1,4 +1,5 @@
 import { closeDb } from "@codeoracle/db";
+import { assertProductionSafety, effectiveBindHost } from "@codeoracle/config";
 import { bootstrapMcpRuntime } from "./bootstrap.js";
 import { listenHttp } from "./transport/http.js";
 import { listenStdio } from "./transport/stdio.js";
@@ -12,6 +13,10 @@ async function main(): Promise<void> {
   const transport = runtime.env.CODEORACLE_MCP_TRANSPORT;
 
   if (transport === "http" || transport === "streamable-http" || transport === "sse") {
+    assertProductionSafety(runtime.env, {
+      bindHosts: [effectiveBindHost(runtime.env.MCP_HTTP_HOST)],
+      bindKind: "mcp",
+    });
     const { close } = await listenHttp({
       runtime,
       port: runtime.env.MCP_HTTP_PORT,

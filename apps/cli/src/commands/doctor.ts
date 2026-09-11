@@ -5,6 +5,9 @@ import pc from "picocolors";
 
 const execFileAsync = promisify(execFile);
 
+/** Bound docker probes so CI/unit runs cannot hang on a stuck daemon. */
+const DOCKER_PROBE_TIMEOUT_MS = 4_000;
+
 export type CheckResult = {
   name: string;
   ok: boolean;
@@ -28,7 +31,9 @@ async function checkNodeVersion(): Promise<CheckResult> {
 
 async function checkDocker(): Promise<CheckResult> {
   try {
-    const { stdout } = await execFileAsync("docker", ["--version"]);
+    const { stdout } = await execFileAsync("docker", ["--version"], {
+      timeout: DOCKER_PROBE_TIMEOUT_MS,
+    });
     return { name: "Docker", ok: true, detail: stdout.trim() };
   } catch {
     return {
@@ -42,7 +47,9 @@ async function checkDocker(): Promise<CheckResult> {
 
 async function checkCompose(): Promise<CheckResult> {
   try {
-    const { stdout } = await execFileAsync("docker", ["compose", "version"]);
+    const { stdout } = await execFileAsync("docker", ["compose", "version"], {
+      timeout: DOCKER_PROBE_TIMEOUT_MS,
+    });
     return { name: "Docker Compose", ok: true, detail: stdout.trim() };
   } catch {
     return {

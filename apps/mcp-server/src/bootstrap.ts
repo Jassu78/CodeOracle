@@ -5,7 +5,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
-import { loadEnv, loadProjectEnv, loadProvidersConfig, type Env } from "@codeoracle/config";
+import { loadEnv, loadProjectEnv, loadProvidersConfig, type Env, assertProductionSafety } from "@codeoracle/config";
 import { createDb, repos, type Database } from "@codeoracle/db";
 import { ProviderRegistry } from "@codeoracle/gateway";
 import {
@@ -35,6 +35,7 @@ export type McpRuntime = {
 export async function bootstrapMcpRuntime(): Promise<McpRuntime> {
   loadProjectEnv(projectRoot);
   const env = loadEnv();
+  assertProductionSafety(env);
 
   if (!env.CODEORACLE_REPO_ID) {
     throw new Error(

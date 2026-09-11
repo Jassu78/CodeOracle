@@ -45,7 +45,26 @@ export const EnvSchema = z.object({
   MCP_HTTP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
 
   API_PORT: z.coerce.number().int().positive().default(3000),
+  /**
+   * Listen address for the HTTP API. Unset → Node binds all interfaces (`0.0.0.0`).
+   * Prefer `127.0.0.1` for local dogfood; set `0.0.0.0` only behind a reverse proxy
+   * with `API_TOKEN` when NODE_ENV=production.
+   */
+  API_HOST: z.string().optional(),
   API_TOKEN: z.string().optional(),
+
+  /**
+   * Comma-separated roots that may contain local clone/register paths.
+   * Required in production whenever registering a local path (E6).
+   * Does not replace P0-A secret basename denylist.
+   */
+  CODEORACLE_ALLOWED_ROOTS: z.preprocess((v) => {
+    if (typeof v !== "string" || v.trim() === "") return [];
+    return v
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  }, z.array(z.string())),
 
   WORKER_CONCURRENCY: z.coerce.number().int().positive().default(6),
   DB_POOL_MAX: z.coerce.number().int().positive().default(5),

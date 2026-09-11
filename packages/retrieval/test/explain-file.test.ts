@@ -115,4 +115,60 @@ describe("explainFile", () => {
     expect(out.chunkSummaries).toEqual([]);
     expect(out.relatedDecisions).toEqual([]);
   });
+
+  it("refuses dotenv secret paths without listing chunks (P0-A)", async () => {
+    const listChunks = vi.fn(async () => [
+      chunk({
+        id: "11111111-1111-4111-8111-111111111111",
+        filePath: ".env2",
+        byteStart: 0,
+        content: "GEMINI_API_KEY=leaked",
+      }),
+    ]);
+    const listDecisions = vi.fn(async () => [
+      decision({
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        topic: "secrets",
+        summary: "should not appear",
+        sourceUrl: "https://github.com/org/repo/pull/9",
+      }),
+    ]);
+
+    const out = await explainFile({
+      db: stubDb,
+      repoId,
+      path: ".env2",
+      deps: { listChunks, listDecisions },
+    });
+
+    expect(out.path).toBe(".env2");
+    expect(out.chunkSummaries).toEqual([]);
+    expect(out.relatedDecisions).toEqual([]);
+    expect(listChunks).not.toHaveBeenCalled();
+    expect(listDecisions).not.toHaveBeenCalled();
+  });
+
+  it("filters secret payloads on otherwise normal paths (P0-A)", async () => {
+    const listChunks = vi.fn(async () => [
+      chunk({
+        id: "11111111-1111-4111-8111-111111111111",
+        filePath: "notes/debug.ts",
+        byteStart: 0,
+        content: "const uri = 'mongodb+srv://user:pass@cluster/db'",
+      }),
+    ]);
+
+    const out = await explainFile({
+      db: stubDb,
+      repoId,
+      path: "notes/debug.ts",
+      deps: {
+        listChunks,
+        listDecisions: async () => [],
+      },
+    });
+
+    expect(out.chunkSummaries).toEqual([]);
+    expect(listChunks).toHaveBeenCalled();
+  });
 });
