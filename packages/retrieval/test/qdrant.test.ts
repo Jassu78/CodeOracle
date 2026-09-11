@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   prepareChunksCollectionForFullIndex,
+  probeSparseEncoderHomogeneity,
   searchSimilarChunks,
   upsertChunkVectors,
 } from "../src/store/qdrant.js";
@@ -46,6 +47,28 @@ describe("qdrant store", () => {
     expect(upserted[0]?.payload.repo_id).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
   });
 
+  it("probes sparse encoder homogeneity and flags legacy points (E3)", async () => {
+    const client = {
+      getCollections: async () => ({ collections: [{ name: "code_chunks" }] }),
+      getCollection: async () => ({
+        config: { params: { sparse_vectors: { text: {} } } },
+      }),
+      scroll: async () => ({
+        points: [
+          { id: "1", payload: { sparse_encoder: "bm25-tf-v1" } },
+          { id: "2", payload: {} },
+          { id: "3", payload: { sparse_encoder: "other" } },
+        ],
+      }),
+    };
+
+    const probe = await probeSparseEncoderHomogeneity(client as never, { sampleSize: 10 });
+    expect(probe.sampled).toBe(3);
+    expect(probe.legacyOrMissing).toBe(1);
+    expect(probe.mismatched).toBe(1);
+    expect(probe.homogeneous).toBe(false);
+  });
+
   it("sets evidenceScore 0 for hybrid sparse-only hits (P0-B / F5)", async () => {
     const sparseOnlyId = "99999999-9999-4999-8999-999999999999";
     const query = vi.fn(async (_collection: string, body: { using?: string }) => {
@@ -53,7 +76,9 @@ describe("qdrant store", () => {
         return { points: [] };
       }
       if (body.using === "text") {
-        return { points: [{ id: sparseOnlyId, score: 0.8 }] };
+        return {
+          points: [{ id: sparseOnlyId, score: 0.8, payload: { sparse_encoder: "bm25-tf-v1" } }],
+        };
       }
       throw new Error(`unexpected using=${body.using}`);
     });

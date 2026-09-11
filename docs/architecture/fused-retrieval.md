@@ -40,7 +40,7 @@ query
   → parallel retrieve:
         lexical (E1)     — symbol / path / literal index
         dense            — named vector `dense` (or legacy unnamed)
-        sparse           — named vector `text` (hash TF + Qdrant IDF today; BM25 in E3)
+        sparse           — BM25 TF (doc) + raw TF (query) + Qdrant IDF (`sparse_encoder=bm25-tf-v1`; full reindex)
   → fuse ranks (domain RRF; lexical as its own channel)
   → hybrid cutoff / backfill policy (existing)
   → diversifyByFilePath (+ doc quota)

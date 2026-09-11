@@ -13,7 +13,7 @@ Vector store helpers + tool-facing retrieval services.
 
 Sparse vectors use local tokenization (`textToSparseVector`) with **BM25 TF** on documents and raw TF on queries; Qdrant applies `idf` modifier (E3). Tokens hash into a 31-bit index (hashing trick — see `sparse-embed.ts`). Identifiers are split on camelCase / snake_case (raw token kept) so NL queries can overlap symbols. **Query-time** splitting applies immediately; **indexed** sparse weights pick up BM25 (and new tokens) only after a **full** reindex.
 
-**E3 reindex (required):** after deploying `sparse_encoder=bm25-tf-v1`, run a **full** reindex per repo. Mixing pre-E3 raw-TF points with BM25-TF points silently skews sparse ranks — upserts stamp `sparse_encoder` on the payload for ops visibility.
+**E3 reindex (required):** after deploying `sparse_encoder=bm25-tf-v1`, run a **full** reindex per repo. Mixing pre-E3 raw-TF points with BM25-TF points skews sparse ranks. Upserts stamp `sparse_encoder` on the payload. Ops: `pnpm --filter @codeoracle/retrieval exec tsx scripts/check-hybrid-mode.ts` exits **3** when a sample is not homogeneous; hybrid search also emits a one-shot `sparse_encoder_mixed` warn per repo.
 
 **Chunk index text:** dense embed + sparse both use `chunkIndexText` (path + basename + symbol + body). Payload still stores structured `file_path` / `symbol_name`. Body-only indexing left identifier-heavy modules mid-rank for NL “where do we …” queries; changing this requires a **full** reindex.
 

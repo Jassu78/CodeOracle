@@ -40,7 +40,7 @@ describe("sparse-embed", () => {
     expect(sparse.values.some((v) => v === 2)).toBe(true);
   });
 
-  it("exports a stable encoder version for reindex gating (E3)", () => {
+  it("exports a stable sparse encoder version string (E3)", () => {
     expect(SPARSE_ENCODER_VERSION).toBe("bm25-tf-v1");
   });
 
