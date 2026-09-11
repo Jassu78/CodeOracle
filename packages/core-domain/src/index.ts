@@ -6,4 +6,5 @@ export * from "./hybrid-rrf.js";
 export * from "./diversify-paths.js";
 export * from "./path-content-class.js";
 export * from "./relative-score-floor.js";
+export * from "./absolute-score-floor.js";
 export * from "./alternatives-consistency.js";
