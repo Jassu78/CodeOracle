@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import type { Env } from "./env.js";
 
@@ -46,7 +47,7 @@ export type ProductionSafetyOpts = {
 /**
  * Fail closed when NODE_ENV=production:
  * - DATABASE_URL must not contain the compose placeholder password
- * - GITHUB_WEBHOOK_SECRET must not be the placeholder literal
+ * - GITHUB_WEBHOOK_SECRET / API_TOKEN / MCP_HTTP_BEARER_TOKEN must not be the placeholder literal
  * - Non-loopback API bind requires API_TOKEN
  * - Non-loopback MCP HTTP bind requires API_TOKEN or MCP_HTTP_BEARER_TOKEN
  *
@@ -70,13 +71,29 @@ export function assertProductionSafety(env: Env, opts: ProductionSafetyOpts = {}
     );
   }
 
+  const apiToken = env.API_TOKEN?.trim() ?? "";
+  if (apiToken === DEV_SECRET_PLACEHOLDER) {
+    throw new ProductionSafetyError(
+      "NODE_ENV=production refuses API_TOKEN=" +
+        `"${DEV_SECRET_PLACEHOLDER}". Set a real API token (or leave unset on loopback-only binds).`,
+    );
+  }
+
+  const mcpBearer = env.MCP_HTTP_BEARER_TOKEN?.trim() ?? "";
+  if (mcpBearer === DEV_SECRET_PLACEHOLDER) {
+    throw new ProductionSafetyError(
+      "NODE_ENV=production refuses MCP_HTTP_BEARER_TOKEN=" +
+        `"${DEV_SECRET_PLACEHOLDER}". Set a real bearer token (or leave unset if unused).`,
+    );
+  }
+
   const hosts = opts.bindHosts ?? [];
   const exposesNonLoopback = hosts.some((h) => !isLoopbackBindHost(effectiveBindHost(h)));
   if (!exposesNonLoopback) return;
 
   const kind = opts.bindKind ?? "api";
-  const hasApiToken = Boolean(env.API_TOKEN?.trim());
-  const hasMcpBearer = Boolean(env.MCP_HTTP_BEARER_TOKEN?.trim());
+  const hasApiToken = apiToken.length > 0;
+  const hasMcpBearer = mcpBearer.length > 0;
 
   if (kind === "api") {
     if (!hasApiToken) {
@@ -98,6 +115,7 @@ export function assertProductionSafety(env: Env, opts: ProductionSafetyOpts = {}
 
 /**
  * Parse CODEORACLE_ALLOWED_ROOTS (comma-separated absolute or relative roots).
+ * Lexical resolve only — realpath happens in `assertLocalClonePathAllowed`.
  */
 export function parseAllowedRoots(raw: string | readonly string[] | undefined): string[] {
   if (raw == null) return [];
@@ -118,11 +136,28 @@ export class AllowedRootsError extends Error {
   }
 }
 
+function realpathOrThrow(label: string, path: string): string {
+  try {
+    return realpathSync(path);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new AllowedRootsError(`cannot realpath ${label} ${path}: ${detail}`);
+  }
+}
+
+function isPathUnderRoot(candidateReal: string, rootReal: string): boolean {
+  return (
+    candidateReal === rootReal ||
+    candidateReal.startsWith(rootReal.endsWith(sep) ? rootReal : rootReal + sep)
+  );
+}
+
 /**
  * Jail local clone/register paths under CODEORACLE_ALLOWED_ROOTS.
- * - roots empty + non-production → allow (dev ergonomics)
+ * - roots empty + non-production → allow (dev ergonomics); returns realpath when possible
  * - roots empty + production → refuse (fail closed)
- * - roots set → path must equal a root or live under it (no .. escape)
+ * - roots set → both roots and candidate are `realpath`'d (blocks symlink escape), then
+ *   path must equal a root or live under it
  */
 export function assertLocalClonePathAllowed(
   localPath: string,
@@ -138,20 +173,24 @@ export function assertLocalClonePathAllowed(
           "This is a clone-root jail — it does not replace the P0-A secret path denylist.",
       );
     }
-    return absPath;
+    try {
+      return realpathSync(absPath);
+    } catch {
+      return absPath;
+    }
   }
 
-  const underRoot = allowedRoots.some((root) => {
-    const r = resolve(root);
-    return absPath === r || absPath.startsWith(r.endsWith(sep) ? r : r + sep);
-  });
+  const realRoots = allowedRoots.map((root) => realpathOrThrow("allowed root", resolve(root)));
+  const realPath = realpathOrThrow("local path", absPath);
+
+  const underRoot = realRoots.some((rootReal) => isPathUnderRoot(realPath, rootReal));
 
   if (!underRoot) {
     throw new AllowedRootsError(
-      `local path ${absPath} is outside CODEORACLE_ALLOWED_ROOTS ` +
-        `(${allowedRoots.join(", ")}).`,
+      `local path ${realPath} is outside CODEORACLE_ALLOWED_ROOTS ` +
+        `(${realRoots.join(", ")}).`,
     );
   }
 
-  return absPath;
+  return realPath;
 }
