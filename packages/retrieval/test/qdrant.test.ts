@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   prepareChunksCollectionForFullIndex,
+  searchSimilarChunks,
   upsertChunkVectors,
 } from "../src/store/qdrant.js";
 
@@ -17,6 +18,40 @@ describe("qdrant store", () => {
     await expect(
       upsertChunkVectors(client, [{ id: "x", vector: [], payload: {} }]),
     ).rejects.toThrow(/empty vector/i);
+  });
+
+  it("sets evidenceScore 0 for hybrid sparse-only hits (P0-B / F5)", async () => {
+    const sparseOnlyId = "99999999-9999-4999-8999-999999999999";
+    const query = vi.fn(async (_collection: string, body: { using?: string }) => {
+      if (body.using === "dense") {
+        return { points: [] };
+      }
+      if (body.using === "text") {
+        return { points: [{ id: sparseOnlyId, score: 0.8 }] };
+      }
+      throw new Error(`unexpected using=${body.using}`);
+    });
+    const client = {
+      getCollections: async () => ({ collections: [{ name: "code_chunks" }] }),
+      getCollection: async () => ({
+        config: { params: { sparse_vectors: { text: {} } } },
+      }),
+      query,
+    };
+
+    const hits = await searchSimilarChunks(client as never, {
+      repoId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      vector: [0.1, 0.2],
+      queryText: "lexical mush only",
+      limit: 5,
+      scoreThreshold: 0.35,
+    });
+
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.id).toBe(sparseOnlyId);
+    expect(hits[0]?.score).toBeGreaterThan(0);
+    expect(hits[0]?.evidenceScore).toBe(0);
+    expect(query).toHaveBeenCalledTimes(2);
   });
 });
 
