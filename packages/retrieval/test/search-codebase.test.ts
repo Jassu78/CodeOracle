@@ -162,4 +162,46 @@ describe("searchCodebase", () => {
       "README.md",
     ]);
   });
+
+  it("refuses .env2-class paths and secret payloads even if indexed (P0-A)", async () => {
+    const secretId = "44444444-4444-4444-8444-444444444444";
+    const okId = "55555555-5555-4555-8555-555555555555";
+    const payloadId = "66666666-6666-4666-8666-666666666666";
+    const search = vi.fn(async () => [
+      { id: secretId, score: 0.99 },
+      { id: payloadId, score: 0.95 },
+      { id: okId, score: 0.9 },
+    ]);
+    const getByIds = vi.fn(async () => [
+      row({
+        id: secretId,
+        filePath: "apps/chatbot/.env2",
+        content: "GEMINI_API_KEY=should-not-leak",
+      }),
+      row({
+        id: payloadId,
+        filePath: "notes/debug.ts",
+        content: "const uri = 'mongodb+srv://user:pass@cluster/db'",
+      }),
+      row({
+        id: okId,
+        filePath: "src/config/env.ts",
+        content: "export function loadEnv() {}",
+        symbolName: "loadEnv",
+      }),
+    ]);
+
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "GEMINI_API_KEY secrets",
+      topK: 5,
+      deps: { search, getByIds },
+    });
+
+    expect(out.results).toHaveLength(1);
+    expect(out.results[0]?.filePath).toBe("src/config/env.ts");
+  });
 });
