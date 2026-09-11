@@ -35,11 +35,21 @@ describe("walk-files security filters", () => {
       "config/secrets.json",
       ".aws/credentials",
       "apps/api/src/lib/auth.ts",
+      ".envoy",
+      "apps/.environment",
     ];
-    expect(SECRET_PATH_IGNORE_PATTERNS.some((p) => p.includes(".env*"))).toBe(true);
+    expect(SECRET_PATH_IGNORE_PATTERNS.some((p) => p.includes(".env[0-9]*"))).toBe(true);
+    expect(SECRET_PATH_IGNORE_PATTERNS.some((p) => p === ".env*" || p === "**/.env*")).toBe(false);
     for (const path of paths) {
       expect(isDeniedOrBinary(path, ig)).toBe(isSecretIndexedPath(path));
     }
+  });
+
+  it("does not deny .envoy / .environment as dotenv (F4)", () => {
+    const ig = buildIgnoreMatcher();
+    expect(isDeniedOrBinary(".envoy", ig)).toBe(false);
+    expect(isDeniedOrBinary("apps/.environment", ig)).toBe(false);
+    expect(isDeniedOrBinary(".envrc", ig)).toBe(false);
   });
 
   it("allows normal source files", () => {
