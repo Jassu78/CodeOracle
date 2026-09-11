@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SECRET_PATH_IGNORE_PATTERNS, isSecretIndexedPath } from "@codeoracle/core-domain";
 import { buildIgnoreMatcher, isDeniedOrBinary } from "../src/crawler/walk-files.js";
 
 describe("walk-files security filters", () => {
@@ -8,6 +9,37 @@ describe("walk-files security filters", () => {
     expect(isDeniedOrBinary("apps/api/.env", ig)).toBe(true);
     expect(isDeniedOrBinary("config/secrets.json", ig)).toBe(true);
     expect(isDeniedOrBinary("deploy/id_rsa", ig)).toBe(true);
+  });
+
+  it("denies .env2-class names and still allows env.ts (P0-A)", () => {
+    const ig = buildIgnoreMatcher();
+    expect(isDeniedOrBinary(".env2", ig)).toBe(true);
+    expect(isDeniedOrBinary("apps/chatbot/.env2", ig)).toBe(true);
+    expect(isDeniedOrBinary(".env.local", ig)).toBe(true);
+    expect(isDeniedOrBinary(".env.staging.local", ig)).toBe(true);
+    expect(isDeniedOrBinary("src/config/env.ts", ig)).toBe(false);
+    expect(isDeniedOrBinary("packages/config/src/env.ts", ig)).toBe(false);
+  });
+
+  it("keeps crawl ignore patterns and isSecretIndexedPath in parity (P0-A)", () => {
+    const ig = buildIgnoreMatcher();
+    const paths = [
+      ".env",
+      ".env2",
+      "apps/chatbot/.env2",
+      ".env.local",
+      "src/config/env.ts",
+      "packages/config/src/env.ts",
+      "deploy/id_rsa",
+      "certs/server.pem",
+      "config/secrets.json",
+      ".aws/credentials",
+      "apps/api/src/lib/auth.ts",
+    ];
+    expect(SECRET_PATH_IGNORE_PATTERNS.some((p) => p.includes(".env*"))).toBe(true);
+    for (const path of paths) {
+      expect(isDeniedOrBinary(path, ig)).toBe(isSecretIndexedPath(path));
+    }
   });
 
   it("allows normal source files", () => {

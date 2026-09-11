@@ -2,6 +2,7 @@ import {
   ExplainFileOutputSchema,
   type ExplainFileOutput,
 } from "@codeoracle/contracts";
+import { mustRefuseSecretRetrieval } from "@codeoracle/core-domain";
 import {
   listChunksByFilePath,
   listDecisionsTouchingPath,
@@ -40,12 +41,24 @@ export async function explainFile(opts: ExplainFileOpts): Promise<ExplainFileOut
   }
 
   const maxSummaries = opts.maxChunkSummaries ?? 40;
+
+  // P0-A: never explain dotenv/secret path class (even if already indexed).
+  if (mustRefuseSecretRetrieval(path)) {
+    return ExplainFileOutputSchema.parse({
+      path,
+      chunkSummaries: [],
+      relatedDecisions: [],
+    });
+  }
+
   const deps: ExplainFileDeps = opts.deps ?? {
     listChunks: (repoId, filePath) => listChunksByFilePath(opts.db, repoId, filePath),
     listDecisions: (repoId, filePath) => listDecisionsTouchingPath(opts.db, repoId, filePath),
   };
 
-  const chunkRows = await deps.listChunks(opts.repoId, path);
+  const chunkRows = (await deps.listChunks(opts.repoId, path)).filter(
+    (row) => !mustRefuseSecretRetrieval(row.filePath, row.content),
+  );
   const decisionRows = await deps.listDecisions(opts.repoId, path);
 
   const chunkSummaries = chunkRows.slice(0, maxSummaries).map(formatChunkSummary);

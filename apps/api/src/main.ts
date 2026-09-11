@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadEnv, loadProjectEnv } from "@codeoracle/config";
+import { loadEnv, loadProjectEnv, assertProductionSafety, effectiveBindHost, assertLocalClonePathAllowed, parseAllowedRoots } from "@codeoracle/config";
 import { JOB_NAMES, type IncrementalReindexJobPayload } from "@codeoracle/contracts";
 import {
   closeDb,
@@ -57,6 +57,11 @@ function isDuplicateJobError(err: unknown): boolean {
 async function main() {
   loadProjectEnv(projectRoot);
   const env = loadEnv();
+  assertProductionSafety(env, {
+    bindHosts: [effectiveBindHost(env.API_HOST)],
+    bindKind: "api",
+  });
+  const allowedRoots = parseAllowedRoots(env.CODEORACLE_ALLOWED_ROOTS);
   const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
 
   // One Redis connection + one BullMQ Queue for the whole process lifetime —
@@ -144,9 +149,18 @@ async function main() {
 
         if (body.localPath) {
           const name = body.name ?? body.localPath.split("/").pop() ?? "repo";
+          let localClonePath: string;
+          try {
+            localClonePath = assertLocalClonePathAllowed(body.localPath, allowedRoots, {
+              nodeEnv: env.NODE_ENV,
+            });
+          } catch (err) {
+            sendJson(res, 400, { error: (err as Error).message });
+            return;
+          }
           const { repoId } = await registerLocalRepo(db, {
             name,
-            localClonePath: resolve(body.localPath),
+            localClonePath,
             branch: body.branch,
           });
           log.info("Registered local repo", { repoId, name });
@@ -277,8 +291,10 @@ async function main() {
     }
   });
 
-  server.listen(env.API_PORT, () => {
+  const listenHost = env.API_HOST?.trim() || undefined;
+  server.listen(env.API_PORT, listenHost, () => {
     log.info("API listening", {
+      host: listenHost ?? "0.0.0.0",
       port: env.API_PORT,
       auth: Boolean(env.API_TOKEN),
       githubWebhook: Boolean(env.GITHUB_WEBHOOK_SECRET),

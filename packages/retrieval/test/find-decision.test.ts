@@ -250,4 +250,66 @@ describe("findDecision", () => {
     expect(out.results[0]?.superseded).toBe(false);
     expect(out.results[1]?.superseded).toBe(true);
   });
+
+  it("returns empty when top cosine is below absolute floor (P0-B xyzzy class)", async () => {
+    const out = await findDecision({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      topic: "xyzzy unrelated nonsense",
+      deps: {
+        search: async () => [
+          { id: activeId, score: 0.55 },
+          { id: bleedId, score: 0.52 },
+        ],
+        getByIds: async () => [
+          row({
+            id: activeId,
+            topic: "Sticky unrelated commit",
+            summary: "Should not ship as a match.",
+            sourceUrl: "https://github.com/org/repo/commit/abc",
+          }),
+          row({
+            id: bleedId,
+            topic: "Also weak",
+            summary: "Also weak.",
+            sourceUrl: "https://github.com/org/repo/commit/def",
+          }),
+        ],
+      },
+    });
+    expect(out.results).toEqual([]);
+  });
+
+  it("keeps in-domain tips above absolute floor then applies relative floor (P0-B)", async () => {
+    const out = await findDecision({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      topic: "HMAC webhook",
+      deps: {
+        search: async () => [
+          { id: activeId, score: 0.89 },
+          { id: bleedId, score: 0.57 },
+        ],
+        getByIds: async () => [
+          row({
+            id: activeId,
+            topic: "GitHub HMAC webhook verification",
+            summary: "Verify raw-body HMAC.",
+            sourceUrl: "https://github.com/org/repo/pull/4",
+          }),
+          row({
+            id: bleedId,
+            topic: "Unrelated neighbor",
+            summary: "Noise.",
+            sourceUrl: "https://github.com/org/repo/pull/5",
+          }),
+        ],
+      },
+    });
+    expect(out.results.map((r) => r.topic)).toEqual(["GitHub HMAC webhook verification"]);
+  });
 });

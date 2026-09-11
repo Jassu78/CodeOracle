@@ -182,7 +182,7 @@ export async function searchSimilarChunks(
     limit?: number;
     scoreThreshold?: number;
   },
-): Promise<Array<{ id: string; score: number }>> {
+): Promise<Array<{ id: string; score: number; evidenceScore: number }>> {
   const limit = opts.limit ?? 10;
   const scoreThreshold = opts.scoreThreshold ?? 0.35;
   const filter = {
@@ -211,6 +211,12 @@ export async function searchSimilarChunks(
       }),
     ]);
 
+    const denseScoreById = new Map(
+      denseResponse.points.map((p: { id: string | number; score: number }) => [
+        String(p.id),
+        p.score,
+      ]),
+    );
     const denseIds = denseResponse.points.map((p: { id: string | number }) => String(p.id));
     const sparseIds = sparseResponse.points.map((p: { id: string | number }) => String(p.id));
 
@@ -228,7 +234,12 @@ export async function searchSimilarChunks(
       backfillSingleChannel: true,
     });
 
-    return cut.map((h) => ({ id: h.id, score: h.score }));
+    // Ranking score = RRF; evidenceScore = dense cosine (0 if sparse-only) for P0-B.
+    return cut.map((h) => ({
+      id: h.id,
+      score: h.score,
+      evidenceScore: denseScoreById.get(h.id) ?? 0,
+    }));
   }
 
   const denseQuery =
@@ -246,6 +257,7 @@ export async function searchSimilarChunks(
   return response.points.map((r: { id: string | number; score: number }) => ({
     id: String(r.id),
     score: r.score,
+    evidenceScore: r.score,
   }));
 }
 
