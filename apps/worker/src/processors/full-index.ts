@@ -16,7 +16,7 @@ import { logProviderUsage } from "@codeoracle/observability";
 import { bullJobId } from "@codeoracle/queue";
 import type { Queue } from "bullmq";
 import type IORedis from "ioredis";
-import { createQdrantClient, deleteRepoDecisionVectors, recreateHybridChunksCollection } from "@codeoracle/retrieval";
+import { createQdrantClient, deleteRepoDecisionVectors, prepareChunksCollectionForFullIndex } from "@codeoracle/retrieval";
 import { cloneGithubRepo, ensureCloneDir } from "../crawler/github-clone.js";
 import { crawlGithubHistory, crawlLocalGitHistory } from "../crawler/github-history.js";
 import { listSourceFiles, resolveRepoHeadSha } from "../crawler/walk-files.js";
@@ -58,11 +58,17 @@ export async function runFullIndexSetup(opts: {
 
     await clearRepoChunks(db, opts.repoId);
     await clearRepoDecisions(db, opts.repoId);
-    // Recreate hybrid collection (dense + sparse) so search_codebase can RRF.
+    // E8: ensure hybrid collection; clear only this repo's chunk vectors (do not
+    // deleteCollection — that wiped every other repo on the shared index).
     const probe = await gateway.embed(["codeoracle dimension probe"]);
     const vectorSize = probe.vectors[0]?.length;
     if (!vectorSize) throw new Error("Embedding probe returned empty vector — cannot create Qdrant collection");
-    await recreateHybridChunksCollection(qdrant, vectorSize);
+    const chunksPrep = await prepareChunksCollectionForFullIndex(qdrant, vectorSize, opts.repoId);
+    if (chunksPrep.action === "recreated-from-legacy") {
+      console.warn(
+        `[full-index] repo=${opts.repoId}: legacy code_chunks recreated as hybrid — all repos' chunk vectors were wiped; reindex every repo`,
+      );
+    }
     await deleteRepoDecisionVectors(qdrant, opts.repoId);
     await clearIndexRun(opts.redis, opts.repoId);
 

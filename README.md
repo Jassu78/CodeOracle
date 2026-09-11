@@ -320,7 +320,7 @@ test/        sample-repo · golden eval · e2e
 - Do not expose Postgres, Redis, Qdrant, or Ollama to the public internet.
 - Set `API_TOKEN` and webhook secret before exposing the API.
 - Images: [`infra/docker/README.md`](./infra/docker/README.md).
-- Full reindex recreates Qdrant `code_chunks` — fine for single-repo dogfood; plan multi-repo carefully.
+- Full reindex clears **this repo’s** Qdrant chunk points on a hybrid collection (E8). Legacy→hybrid still recreates the collection once — reindex other repos afterward.
 
 **GitHub Pages / public docs site:** parked on purpose while the repo is **private**. Revisit after a public launch (Q6 / homepage) — not before.
 
