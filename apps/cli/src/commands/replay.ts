@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import pc from "picocolors";
 import { loadEnv, loadProjectEnv, loadProvidersConfig } from "@codeoracle/config";
 import { closeDb, createDb, getRepoById } from "@codeoracle/db";
-import { ProviderRegistry } from "@codeoracle/gateway";
+import { ProviderRegistry, createSearchRerankFn } from "@codeoracle/gateway";
 import { createQdrantClient, findDecision, searchCodebase } from "@codeoracle/retrieval";
 import { loadReplaySuite } from "../replay/load-suite.js";
 import { scoreReplayFind, scoreReplaySearch, type CaseScore } from "../replay/score.js";
@@ -61,6 +61,11 @@ export async function runReplay(
     const providers = loadProvidersConfig(providersPath, process.env);
     const gateway = new ProviderRegistry({ config: providers, env: process.env });
     const embed = async (texts: string[]) => (await gateway.embed(texts)).vectors;
+    const rerankEnabled = env.SEARCH_RERANK_ENABLED;
+    const rerank = createSearchRerankFn(gateway, providers, {
+      enabled: rerankEnabled,
+      timeoutMs: env.SEARCH_RERANK_TIMEOUT_MS,
+    });
 
     console.log(
       pc.bold(`Replay for ${repo.githubFullName ?? repo.localClonePath ?? repoId}`) +
@@ -82,6 +87,10 @@ export async function runReplay(
           query: c.query,
           // Final display size = hit@K; searchCodebase already over-fetches before diversify.
           topK: c.expect.hitAt,
+          rerankEnabled,
+          rerank,
+          rerankMaxCandidates: env.SEARCH_RERANK_MAX_CANDIDATES,
+          rerankTimeoutMs: env.SEARCH_RERANK_TIMEOUT_MS,
         });
         const scored = scoreReplaySearch(
           out.results.map((r) => ({

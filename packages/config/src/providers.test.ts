@@ -43,6 +43,64 @@ embeddings:
     const config = loadProvidersConfig(file, {});
     expect(config.chat).toHaveLength(1);
     expect(config.embeddings).toHaveLength(1);
+    expect(config.rerank).toEqual([]);
+  });
+
+  it("defaults missing rerank: key to empty array", () => {
+    const file = writeYaml(`
+chat: []
+embeddings: []
+`);
+    const config = loadProvidersConfig(file, {});
+    expect(config.rerank).toEqual([]);
+  });
+
+  it("validates enabled rerank endpoints for apiKeyEnv", () => {
+    const file = writeYaml(`
+chat: []
+embeddings: []
+rerank:
+  - id: cloud-rerank
+    protocol: tei
+    baseUrl: https://tei.example
+    apiKeyEnv: TEI_API_KEY
+    model: BAAI/bge-reranker-base
+    priority: 1
+    enabled: true
+`);
+    expect(() => loadProvidersConfig(file, {})).toThrow(ProvidersConfigError);
+    expect(() => loadProvidersConfig(file, { TEI_API_KEY: "x" })).not.toThrow();
+  });
+
+  it("getOrderedEndpoints sorts enabled rerank endpoints", () => {
+    const file = writeYaml(`
+chat: []
+embeddings: []
+rerank:
+  - id: second
+    protocol: tei
+    baseUrl: http://b
+    apiKeyEnv: null
+    model: m
+    priority: 2
+    enabled: true
+  - id: first
+    protocol: tei
+    baseUrl: http://a
+    apiKeyEnv: null
+    model: m
+    priority: 1
+    enabled: true
+  - id: off
+    protocol: tei
+    baseUrl: http://c
+    apiKeyEnv: null
+    model: m
+    priority: 0
+    enabled: false
+`);
+    const config = loadProvidersConfig(file, {});
+    expect(getOrderedEndpoints(config, "rerank").map((e) => e.id)).toEqual(["first", "second"]);
   });
 
   it("fails loudly when an enabled endpoint's apiKeyEnv is missing from env", () => {

@@ -34,6 +34,7 @@ const testConfig: ProvidersConfig = {
       enabled: true,
     },
   ],
+  rerank: [],
 };
 
 describe("ProviderRegistry", () => {
@@ -118,6 +119,7 @@ describe("ProviderRegistry", () => {
       config: {
         chat: [testConfig.chat[0]!],
         embeddings: [],
+        rerank: [],
       },
       env: {},
     });

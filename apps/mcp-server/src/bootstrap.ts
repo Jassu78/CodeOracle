@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { eq } from "drizzle-orm";
 import { loadEnv, loadProjectEnv, loadProvidersConfig, type Env, assertProductionSafety } from "@codeoracle/config";
 import { createDb, repos, type Database } from "@codeoracle/db";
-import { ProviderRegistry } from "@codeoracle/gateway";
+import { ProviderRegistry, createSearchRerankFn } from "@codeoracle/gateway";
 import {
   createQdrantClient,
   explainFile,
@@ -77,8 +77,12 @@ export async function bootstrapMcpRuntime(): Promise<McpRuntime> {
 
   const embed = async (texts: string[]) => (await gateway.embed(texts)).vectors;
 
-  // E2: kill-switch defaults off. Real CE provider not shipped — omit `rerank` → identity.
+  // E2/E2.1: kill-switch defaults off. Inject TEI rerank only when enabled + endpoints.
   const rerankEnabled = env.SEARCH_RERANK_ENABLED;
+  const rerank = createSearchRerankFn(gateway, providers, {
+    enabled: rerankEnabled,
+    timeoutMs: env.SEARCH_RERANK_TIMEOUT_MS,
+  });
 
   const runners = {
     findDecision: (async ({ topic, includeHistory }) =>
@@ -92,9 +96,9 @@ export async function bootstrapMcpRuntime(): Promise<McpRuntime> {
         query,
         topK,
         rerankEnabled,
+        rerank,
         rerankMaxCandidates: env.SEARCH_RERANK_MAX_CANDIDATES,
         rerankTimeoutMs: env.SEARCH_RERANK_TIMEOUT_MS,
-        // rerank: undefined until a cross-encoder / late-interaction adapter exists
       })) satisfies SearchCodebaseRunner,
     explainFile: (async ({ path }) => explainFile({ db, repoId, path })) satisfies ExplainFileRunner,
   };

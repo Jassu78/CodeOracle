@@ -73,6 +73,7 @@ describe.skipIf(!integrationEnabled)("stage-2 index pipeline", () => {
             enabled: true,
           },
         ],
+        rerank: [],
       };
 
       const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);

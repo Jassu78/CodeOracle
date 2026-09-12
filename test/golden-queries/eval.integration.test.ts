@@ -108,6 +108,7 @@ describe.skipIf(!integrationEnabled)("golden-query eval (D5.2)", () => {
             enabled: true,
           },
         ],
+        rerank: [],
       };
 
       const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
