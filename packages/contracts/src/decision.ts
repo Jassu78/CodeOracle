@@ -2,10 +2,11 @@ import { z } from "zod";
 
 /**
  * Decision source types. `review_comment` is schema-ready but explicitly
- * out of MVP scope — no extraction
- * pipeline may claim to produce it until PR review comment crawling exists.
+ * out of MVP LLM extraction — no extraction pipeline may claim to produce it
+ * until PR review comment crawling exists. `doc` is produced by deterministic
+ * decision-shaped doc indexing (P1-A), never by the LLM extract path.
  */
-export const DecisionSourceType = z.enum(["pr", "commit", "review_comment"]);
+export const DecisionSourceType = z.enum(["pr", "commit", "review_comment", "doc"]);
 export type DecisionSourceType = z.infer<typeof DecisionSourceType>;
 
 /**

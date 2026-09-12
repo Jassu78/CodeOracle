@@ -17,11 +17,12 @@ import { bullJobId } from "@codeoracle/queue";
 import type { Queue } from "bullmq";
 import type IORedis from "ioredis";
 import { createQdrantClient, deleteRepoDecisionVectors, prepareChunksCollectionForFullIndex } from "@codeoracle/retrieval";
-import { cloneGithubRepo, ensureCloneDir } from "../crawler/github-clone.js";
+import { cloneGithubRepo, ensureCloneDir, resolveRepoRoot } from "../crawler/github-clone.js";
 import { crawlGithubHistory, crawlLocalGitHistory } from "../crawler/github-history.js";
 import { listSourceFiles, resolveRepoHeadSha } from "../crawler/walk-files.js";
 import { flushDeferredPushToQueue } from "../lib/deferred-push.js";
 import { assertIndexedLocalClonePath } from "../lib/assert-indexed-local-clone-path.js";
+import { indexDocDecisionsForRepo } from "../lib/index-doc-decisions.js";
 import { beginIndexRun, clearIndexRun, getIndexRunKind, getIndexRunStats, getPendingFileCount } from "../lib/index-progress.js";
 import { queueExtractDecisionsForRepo } from "../lib/queue-extraction-jobs.js";
 
@@ -114,6 +115,7 @@ export async function runFullIndexSetup(opts: {
     if (files.length === 0) {
       await finalizeIndexIfComplete({
         env: opts.env,
+        providers: opts.providers,
         redis: opts.redis,
         db: opts.db,
         repoId: opts.repoId,
@@ -160,6 +162,8 @@ export async function finalizeIndexIfComplete(opts: {
   db: Database;
   repoId: string;
   queue?: Queue;
+  /** Required to index decision-shaped docs (P1-A) on full-index finalize. */
+  providers?: ProvidersConfig;
 }): Promise<boolean> {
   const remaining = await getPendingFileCount(opts.redis, opts.repoId);
   if (remaining > 0) return false;
@@ -192,6 +196,7 @@ export async function finalizeIndexIfComplete(opts: {
     await clearIndexRun(opts.redis, opts.repoId);
     // Full-history extract is only for full index. Merged-PR extract on push is G4.10
     // (queued from incremental-reindex when afterSha maps to a merged PR).
+    // Doc decisions for changed paths are indexed in incremental-reindex itself.
     if (opts.queue) {
       await flushDeferredAfterReady({
         redis: opts.redis,
@@ -210,6 +215,20 @@ export async function finalizeIndexIfComplete(opts: {
   await clearIndexRun(opts.redis, opts.repoId);
 
   if (opts.queue) {
+    if (opts.providers) {
+      await maybeIndexDocDecisionsOnFullFinalize({
+        env: opts.env,
+        providers: opts.providers,
+        redis: opts.redis,
+        db: opts.db,
+        repoId: opts.repoId,
+      });
+    } else {
+      console.warn(
+        `[doc-decisions] repo=${opts.repoId}: providers missing on finalize — skipping doc decision index`,
+      );
+    }
+
     const limit = opts.env.EXTRACT_QUEUE_LIMIT;
     const { queued: extractQueued, skippedTrivial, skippedCommitCoveredByPr } =
       await queueExtractDecisionsForRepo({
@@ -237,6 +256,69 @@ export async function finalizeIndexIfComplete(opts: {
   }
 
   return true;
+}
+
+async function maybeIndexDocDecisionsOnFullFinalize(opts: {
+  env: Env;
+  providers: ProvidersConfig;
+  redis: IORedis;
+  db: Database;
+  repoId: string;
+}): Promise<void> {
+  const [repo] = await opts.db.select().from(repos).where(eq(repos.id, opts.repoId)).limit(1);
+  if (!repo) return;
+
+  let repoRoot: string;
+  try {
+    if (repo.localClonePath) {
+      repoRoot = assertIndexedLocalClonePath(opts.env, repo.localClonePath);
+    } else {
+      repoRoot = resolveRepoRoot({
+        cloneRoot: opts.env.CODEORACLE_CLONE_DIR,
+        githubFullName: repo.githubFullName,
+      });
+    }
+  } catch (err) {
+    console.warn(
+      `[doc-decisions] repo=${opts.repoId}: cannot resolve clone path — ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return;
+  }
+
+  let sourceSha: string;
+  try {
+    sourceSha = await resolveRepoHeadSha(repoRoot);
+  } catch (err) {
+    console.warn(
+      `[doc-decisions] repo=${opts.repoId}: cannot resolve HEAD — ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return;
+  }
+
+  try {
+    const result = await indexDocDecisionsForRepo({
+      env: opts.env,
+      providers: opts.providers,
+      redis: opts.redis,
+      db: opts.db,
+      repoId: opts.repoId,
+      sourceSha,
+      repoRoot,
+    });
+    if (result.inserted > 0 || result.filesConsidered > 0 || result.skippedNoGithubBase) {
+      console.info(
+        `[doc-decisions] repo=${opts.repoId}: files=${result.filesConsidered} inserted=${result.inserted}` +
+          (result.skippedSecret ? ` skippedSecret=${result.skippedSecret}` : "") +
+          (result.skippedOversize ? ` skippedOversize=${result.skippedOversize}` : "") +
+          (result.truncatedByCap ? " truncatedByCap=1" : "") +
+          (result.skippedNoGithubBase ? " skippedNoGithubBase=1" : ""),
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[doc-decisions] repo=${opts.repoId}: index failed — ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 async function flushDeferredAfterReady(opts: {

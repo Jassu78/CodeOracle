@@ -3,6 +3,7 @@ import { chunkFile, hashContent } from "@codeoracle/chunker";
 import type { ChunkFileJobPayload } from "@codeoracle/contracts";
 import { JOB_NAMES } from "@codeoracle/contracts";
 import type { Env } from "@codeoracle/config";
+import type { ProvidersConfig } from "@codeoracle/contracts";
 import { chunks, finishJobHistory, startJobHistory, type Database } from "@codeoracle/db";
 import { bullJobId } from "@codeoracle/queue";
 import type { Queue } from "bullmq";
@@ -13,6 +14,7 @@ import { finalizeIndexIfComplete } from "./full-index.js";
 
 export async function runChunkFile(opts: {
   env: Env;
+  providers: ProvidersConfig;
   redis: IORedis;
   db: Database;
   queue: Queue;
@@ -38,6 +40,7 @@ export async function runChunkFile(opts: {
         db: opts.db,
         repoId: opts.payload.repoId,
         queue: opts.queue,
+        providers: opts.providers,
       });
       return { chunkCount: 0 };
     }
@@ -96,6 +99,7 @@ export async function runChunkFile(opts: {
         db: opts.db,
         repoId: opts.payload.repoId,
         queue: opts.queue,
+        providers: opts.providers,
       });
     }
 

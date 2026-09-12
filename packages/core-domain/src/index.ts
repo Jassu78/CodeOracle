@@ -6,6 +6,7 @@ export * from "./hybrid-rrf.js";
 export * from "./diversify-paths.js";
 export * from "./path-content-class.js";
 export * from "./secret-path-class.js";
+export * from "./decision-shaped-doc-path.js";
 export * from "./relative-score-floor.js";
 export * from "./absolute-score-floor.js";
 export * from "./lexical-query.js";

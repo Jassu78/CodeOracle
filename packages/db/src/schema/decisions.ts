@@ -31,8 +31,8 @@ export const decisions = pgTable(
     // are display-only content, never independently queried in v1.
     alternativesConsidered: text("alternatives_considered").array().notNull().default(sql`'{}'::text[]`),
     decidedAt: timestamp("decided_at", { withTimezone: true }).notNull(),
-    // 'pr' | 'commit' | 'review_comment' — review_comment is schema-ready but
-    // not extracted yet. Kept as text, not pg enum, for forward compatibility.
+    // 'pr' | 'commit' | 'review_comment' | 'doc' — review_comment not extracted yet;
+    // doc is deterministic P1-A indexing. Kept as text, not pg enum, for forward compatibility.
     sourceType: text("source_type").notNull(),
     sourceUrl: text("source_url").notNull(),
     sourceSha: text("source_sha").notNull(),
