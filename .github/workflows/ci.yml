@@ -46,6 +46,11 @@ jobs:
       - name: Golden fixture + query-set tests (D5.1)
         run: pnpm test:golden
 
+      # Workspace packages export dist/ — gate vitest resolves @codeoracle/*
+      # via package.json exports (same as integration-test).
+      - name: Build packages (for retrieval gates)
+        run: pnpm build
+
       - name: Retrieval failure-class gates (E11)
         run: pnpm test:retrieval-gates
 
