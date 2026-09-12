@@ -120,7 +120,14 @@ async function main() {
     await handleIndexJobFailure({ env, providers, redis: connection, db, queue, job, err: err as Error });
 
     const repoId = (job?.data as { repoId?: string } | undefined)?.repoId;
-    if (job?.name === JOB_NAMES.FULL_INDEX && repoId && job.attemptsMade >= (job.opts.attempts ?? 1)) {
+    const msg = (err as Error).message ?? "";
+    // Lease contention is expected when another run is in progress — do not tear down that run.
+    if (
+      job?.name === JOB_NAMES.FULL_INDEX &&
+      repoId &&
+      job.attemptsMade >= (job.opts.attempts ?? 1) &&
+      !/index lease held/i.test(msg)
+    ) {
       await markRepoIndexError(env, repoId, connection, db);
     }
   });

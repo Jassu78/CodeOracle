@@ -9,9 +9,13 @@ mkdir -p "${CODEORACLE_RUN}"
 
 n="$(count_preflight_workers)"
 if [[ "${n}" -gt 0 ]]; then
-  echo "ERROR: ${n} worker already running — refuse to start a duplicate." >&2
-  echo "Run: ${SCRIPT_DIR}/stop-worker.sh   then retry." >&2
-  exit 1
+  if [[ "${CODEORACLE_ALLOW_MULTI_WORKER:-0}" != "1" ]]; then
+    echo "ERROR: ${n} worker already running — refuse to start a duplicate." >&2
+    echo "Run: ${SCRIPT_DIR}/stop-worker.sh   then retry." >&2
+    echo "Or set CODEORACLE_ALLOW_MULTI_WORKER=1 (E9: same rebuilt dist on every replica)." >&2
+    exit 1
+  fi
+  echo "WARN: CODEORACLE_ALLOW_MULTI_WORKER=1 — starting another worker (count was ${n})." >&2
 fi
 
 if [[ ! -d "${CODEORACLE_REPO}" ]]; then
@@ -38,7 +42,7 @@ for _ in $(seq 1 30); do
   if [[ "${n}" -ge 1 ]] && grep -q "Worker listening for jobs" "${CODEORACLE_RUN}/worker.log" 2>/dev/null; then
     wpid="$(pids_for_cwd "${WORKER_CWD}" | head -n1)"
     echo "worker started pid=${wpid} (launcher=$(cat "${CODEORACLE_RUN}/worker.pid"))"
-    if [[ "${n}" -gt 1 ]]; then
+    if [[ "${n}" -gt 1 && "${CODEORACLE_ALLOW_MULTI_WORKER:-0}" != "1" ]]; then
       echo "ERROR: started but count=${n} — aborting mindset; stop and investigate" >&2
       exit 2
     fi

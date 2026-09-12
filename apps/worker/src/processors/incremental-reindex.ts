@@ -45,6 +45,7 @@ import {
   readRepoFile,
 } from "../crawler/walk-files.js";
 import { recordDeferredPush } from "../lib/deferred-push.js";
+import { tryAcquireIndexLease } from "../lib/index-lease.js";
 import { beginIndexRun, clearIndexRun, markFileComplete } from "../lib/index-progress.js";
 import { indexDocDecisionsForRepo } from "../lib/index-doc-decisions.js";
 import { queueExtractDecisionsForSourceIds } from "../lib/queue-extraction-jobs.js";
@@ -138,8 +139,7 @@ export async function runIncrementalReindex(opts: {
     throw new Error(`Repo ${repoId} not found`);
   }
 
-  // Do not mark job_history done when deferring — that would permanently skip this afterSha.
-  // Coalesce into Redis; flushDeferredPushToQueue runs when index returns to ready.
+  // Soft flag: also check Redis lease (covers TOCTOU before indexStatus flips).
   if (repo.indexStatus === "indexing") {
     const deferred = await recordDeferredPush(opts.redis, repoId, { beforeSha, afterSha });
     return {
@@ -154,6 +154,20 @@ export async function runIncrementalReindex(opts: {
   }
   if (!repo.embeddingModelId) {
     throw new Error(`Repo ${repoId} missing embeddingModelId — run full index first`);
+  }
+
+  const lease = await tryAcquireIndexLease(opts.redis, repoId);
+  if (!lease) {
+    const deferred = await recordDeferredPush(opts.redis, repoId, { beforeSha, afterSha });
+    return {
+      skipped: true,
+      reason: `index lease held — deferred push ${deferred.baseSha.slice(0, 7)}..${deferred.tipSha.slice(0, 7)}`,
+      deletedFiles: 0,
+      rechunkedFiles: 0,
+      embedJobsQueued: 0,
+      unchangedFiles: 0,
+      mergedPrExtractQueued: 0,
+    };
   }
 
   const jobHistoryId = await startJobHistory(opts.db, {
@@ -411,6 +425,7 @@ export async function runIncrementalReindex(opts: {
   } catch (err) {
     await opts.db.update(repos).set({ indexStatus: "error" }).where(eq(repos.id, repoId));
     await clearIndexRun(opts.redis, repoId);
+    await lease.release();
     const message = err instanceof Error ? err.message : String(err);
     await finishJobHistory(opts.db, jobHistoryId, {
       status: "error",
