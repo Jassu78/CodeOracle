@@ -61,6 +61,11 @@ export const FindDecisionResultSchema = z.object({
   alternativesConsidered: z.array(z.string()),
   sourceUrl: z.string().url(), // citation — never optional; "no citation = bug"
   confidence: z.number().min(0).max(1),
+  /**
+   * Fused hybrid RRF display score (E4). Floors use dense evidence separately;
+   * this is the rank score clients see after survivors are ordered.
+   */
+  retrievalScore: z.number(),
   superseded: z.boolean(),
 });
 export type FindDecisionResult = z.infer<typeof FindDecisionResultSchema>;

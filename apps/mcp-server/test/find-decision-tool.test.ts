@@ -14,6 +14,7 @@ describe("runFindDecisionTool", () => {
           alternativesConsidered: ["Redis"],
           sourceUrl: "https://github.com/org/repo/pull/1",
           confidence: 0.9,
+          retrievalScore: 0.42,
           superseded: false,
         },
       ],
@@ -65,11 +66,13 @@ describe("formatFindDecisionText", () => {
           alternativesConsidered: ["SQS"],
           sourceUrl: "https://github.com/org/repo/pull/2",
           confidence: 0.8,
+          retrievalScore: 0.31,
           superseded: false,
         },
       ],
     });
     expect(text).toContain("Queues");
+    expect(text).toContain("retrievalScore=");
     expect(text).toContain("https://github.com/org/repo/pull/2");
   });
 });

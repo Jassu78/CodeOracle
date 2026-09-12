@@ -47,5 +47,5 @@ Sparse vectors use local tokenization (`textToSparseVector`) with **BM25 TF** on
 
 ## `find_decision`
 
-Dense topic embed + hybrid RRF over `decisions` (E4), then hydrate + citation filter. Floors use **dense evidence** (absolute default `0.58`, relative `topEvidence × 0.85`); display order among survivors is RRF. Sparse-only tips cannot clear the absolute floor. After deploying E4, run a **full** reindex so `decisions` migrates from legacy dense to hybrid (first legacy recreate wipes all decision vectors — reindex every repo). No E2 rerank on this path.
+Dense topic embed + hybrid RRF over `decisions` (E4), then hydrate + citation filter. Floors use **dense evidence** (absolute default `0.58`, relative `topEvidence × 0.85`); display order among survivors is RRF. Each result includes `retrievalScore` (RRF) and extract `confidence` (T10). Sparse-only tips cannot clear the absolute floor. After deploying E4, run a **full** reindex so `decisions` migrates from legacy dense to hybrid (first legacy recreate wipes all decision vectors — reindex every repo). No E2 rerank on this path.
 
