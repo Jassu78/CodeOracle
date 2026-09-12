@@ -41,5 +41,5 @@ Document each ignored id in this file with package, rationale, owner, and review
 ## Related
 
 - Dependabot: `.github/dependabot.yml` (weekly npm + Actions minors/patches)
-- CodeQL: `.github/workflows/codeql.yml` (SAST on default branch + PRs)
+- CodeQL: `.github/workflows/codeql.yml` (SAST on default branch + PRs) — see [`codeql.md`](./codeql.md)
 - Local: `pnpm audit --prod` (all severities)

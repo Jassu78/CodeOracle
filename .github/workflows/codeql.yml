@@ -20,6 +20,8 @@ jobs:
     permissions:
       actions: read
       contents: read
+      # Required once GitHub code scanning is enabled on the repo (Settings →
+      # Code security). Until then we keep upload:never so analysis still gates CI.
       security-events: write
 
     steps:
@@ -35,3 +37,15 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:javascript-typescript"
+          # Private repos without Code Scanning / GHAS cannot upload SARIF to
+          # the Security tab. Analysis still runs and fails the job on query
+          # errors. Enable code scanning in repo settings to switch to upload.
+          upload: never
+
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-javascript-typescript
+          path: ${{ runner.temp }}/codeql/javascript/results/*.sarif
+          if-no-files-found: ignore
+          retention-days: 14
