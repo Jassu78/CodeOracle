@@ -12,6 +12,9 @@ describe("loadEnv", () => {
     const env = loadEnv(validBase as NodeJS.ProcessEnv);
     expect(env.DATABASE_URL).toBe(validBase.DATABASE_URL);
     expect(env.NODE_ENV).toBe("development"); // safe default: not a secret, not connectivity-relevant
+    expect(env.SEARCH_RERANK_ENABLED).toBe(false);
+    expect(env.SEARCH_RERANK_MAX_CANDIDATES).toBe(20);
+    expect(env.SEARCH_RERANK_TIMEOUT_MS).toBe(150);
   });
 
   it("throws loudly when DATABASE_URL is missing — never silently defaults", () => {

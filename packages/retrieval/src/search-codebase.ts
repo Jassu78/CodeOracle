@@ -17,7 +17,12 @@ import {
   type LexicalChunkHit,
 } from "@codeoracle/db";
 import { searchSimilarChunks } from "./store/qdrant.js";
-import type { EmbedFn } from "./util.js";
+import {
+  applyRerankOrder,
+  withTimeout,
+  type EmbedFn,
+  type RerankFn,
+} from "./util.js";
 
 export type ChunkSearchHit = {
   id: string;
@@ -60,6 +65,17 @@ export type SearchCodebaseOpts = {
    * Default SEARCH_ABSOLUTE_SCORE_FLOOR (0.35).
    */
   absoluteMinScore?: number;
+  /**
+   * E2 kill-switch (from env SEARCH_RERANK_ENABLED). When false/undefined,
+   * rerank is not invoked — fused order is identity.
+   */
+  rerankEnabled?: boolean;
+  /** Injected rerank adapter; required for ON path. Omitted = identity even if enabled. */
+  rerank?: RerankFn;
+  /** Cap candidates sent to rerank (default 20). */
+  rerankMaxCandidates?: number;
+  /** Fail-open timeout ms (default 150). */
+  rerankTimeoutMs?: number;
   /** Test seam — production callers omit this. */
   deps?: SearchCodebaseDeps;
 };
@@ -229,6 +245,39 @@ export async function searchCodebase(opts: SearchCodebaseOpts): Promise<SearchCo
     return SearchCodebaseOutputSchema.parse({ results: [] });
   }
 
-  const results = diversifyByFilePath(hydrated, limit);
+  let ordered = hydrated;
+  if (opts.rerankEnabled && opts.rerank) {
+    const maxCandidates = opts.rerankMaxCandidates ?? 20;
+    const timeoutMs = opts.rerankTimeoutMs ?? 150;
+    const pool = hydrated.slice(0, maxCandidates);
+    const rest = hydrated.slice(maxCandidates);
+    try {
+      const ranked = await withTimeout(
+        opts.rerank(
+          query,
+          pool.map((r) => ({
+            id: r.chunkId,
+            text: `${r.filePath}\n${r.symbolName ?? ""}\n${r.content}`.slice(0, 4000),
+          })),
+        ),
+        timeoutMs,
+        "rerank",
+      );
+      ordered = [...applyRerankOrder(pool, ranked), ...rest];
+    } catch (err) {
+      console.warn(
+        JSON.stringify({
+          component: "search_codebase",
+          event: "rerank_unavailable",
+          repoId: opts.repoId,
+          candidateCount: pool.length,
+          err: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      ordered = hydrated;
+    }
+  }
+
+  const results = diversifyByFilePath(ordered, limit);
   return SearchCodebaseOutputSchema.parse({ results });
 }

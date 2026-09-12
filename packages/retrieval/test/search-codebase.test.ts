@@ -383,4 +383,102 @@ describe("searchCodebase", () => {
     expect(out.results).toHaveLength(1);
     expect(out.results[0]?.chunkId).toBe(exactId);
   });
+
+  it("E2 OFF / missing rerank keeps fused order (identity)", async () => {
+    const rerank = vi.fn(async () => [{ id: chunkB, score: 1 }]);
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "login",
+      topK: 5,
+      rerankEnabled: false,
+      rerank,
+      deps: {
+        search: async () => [hit(chunkA, 0.9), hit(chunkB, 0.7)],
+        getByIds: async () => [
+          row({ id: chunkA, filePath: "a.ts", content: "A" }),
+          row({ id: chunkB, filePath: "b.ts", content: "B" }),
+        ],
+      },
+    });
+    expect(rerank).not.toHaveBeenCalled();
+    expect(out.results.map((r) => r.chunkId)).toEqual([chunkA, chunkB]);
+  });
+
+  it("E2 enabled without rerank fn stays identity", async () => {
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "login",
+      topK: 5,
+      rerankEnabled: true,
+      deps: {
+        search: async () => [hit(chunkA, 0.9), hit(chunkB, 0.7)],
+        getByIds: async () => [
+          row({ id: chunkA, filePath: "a.ts", content: "A" }),
+          row({ id: chunkB, filePath: "b.ts", content: "B" }),
+        ],
+      },
+    });
+    expect(out.results.map((r) => r.chunkId)).toEqual([chunkA, chunkB]);
+  });
+
+  it("E2 ON with fake rerank reorders but keeps fused scores", async () => {
+    const out = await searchCodebase({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      query: "login",
+      topK: 5,
+      rerankEnabled: true,
+      rerank: async () => [
+        { id: chunkB, score: 0.99 },
+        { id: chunkA, score: 0.1 },
+      ],
+      deps: {
+        search: async () => [hit(chunkA, 0.9), hit(chunkB, 0.7)],
+        getByIds: async () => [
+          row({ id: chunkA, filePath: "a.ts", content: "A" }),
+          row({ id: chunkB, filePath: "b.ts", content: "B" }),
+        ],
+      },
+    });
+    expect(out.results.map((r) => r.chunkId)).toEqual([chunkB, chunkA]);
+    expect(out.results[0]?.score).toBe(0.7);
+    expect(out.results[1]?.score).toBe(0.9);
+  });
+
+  it("E2 fail-open keeps fused order when rerank throws", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const out = await searchCodebase({
+        db: stubDb,
+        qdrant: stubQdrant,
+        embed: async () => [[0.1]],
+        repoId,
+        query: "login",
+        topK: 5,
+        rerankEnabled: true,
+        rerank: async () => {
+          throw new Error("ce down");
+        },
+        deps: {
+          search: async () => [hit(chunkA, 0.9), hit(chunkB, 0.7)],
+          getByIds: async () => [
+            row({ id: chunkA, filePath: "a.ts", content: "A" }),
+            row({ id: chunkB, filePath: "b.ts", content: "B" }),
+          ],
+        },
+      });
+      expect(out.results.map((r) => r.chunkId)).toEqual([chunkA, chunkB]);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

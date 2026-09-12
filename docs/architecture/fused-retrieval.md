@@ -43,11 +43,11 @@ query
         sparse           — BM25 TF (doc) + raw TF (query) + Qdrant IDF (`sparse_encoder=bm25-tf-v1`; full reindex)
   → fuse ranks (domain RRF; lexical as its own channel)
   → hybrid cutoff / backfill policy (existing)
-  → diversifyByFilePath (+ doc quota)
-  → optional learned rerank (E2 — off until eval lift + kill-switch)
   → Postgres hydrate
   → P0-A mustRefuseSecretRetrieval (path + payload)
   → P0-B absolute dense-evidence floor (search)
+  → optional learned rerank (E2 — `SEARCH_RERANK_ENABLED`, default off; after hydrate, before diversify)
+  → diversifyByFilePath (+ doc quota)
   → citation / Zod → results (may be empty)
 ```
 
@@ -78,6 +78,7 @@ query
 | **Empty sparse channel** | Dense-only (or dense+lexical) fusion; existing single-channel fallback |
 | **Denied-path hydrate refuse (P0-A)** | Drop chunk even if ranked; continue. Empty list is valid |
 | **Absolute no-match (P0-B)** | If best **dense evidence** `< SEARCH_ABSOLUTE_SCORE_FLOOR` → `{ results: [] }`. Sparse-only / lexical-only tips must not invent dense evidence; E1 must define how lexical-only strong hits interact with the floor (see E1 open point below) |
+| **Rerank unavailable / timeout (E2)** | Fail-open: keep fused post-filter order; log `rerank_unavailable`. Never empty the tool solely due to rerank. OFF path skips the call entirely (identity). |
 | **Legacy dense collection** | Dense-only query path; no sparse; lexical still OK if Postgres-backed |
 | **Multi-repo** | Every vector/SQL filter includes `repo_id`; E8 scoped clear on full index |
 
@@ -159,9 +160,16 @@ Export path: structured logs today; **E7** OTel later.
 |-------|---------------|--------|
 | Retrieve | Dense + sparse hybrid RRF | + lexical channel (E1) |
 | Sparse quality | Hash bag + IDF | **E3:** BM25 TF (doc) + Qdrant IDF; full reindex required (`sparse_encoder=bm25-tf-v1`) |
-| Rerank | None | Optional post-fusion (E2) |
+| Rerank | Hook + kill-switch (`SEARCH_RERANK_ENABLED=false`) | Optional CE/late-interaction provider (E2.1) when eval shows lift |
 | Floors / refuse | P0-A + P0-B | Keep; extend for lexical (E1) |
 | Isolation | E8 scoped full-index clear | Keep |
+
+### E2 latency budget
+
+- Cap: ≤ `SEARCH_RERANK_MAX_CANDIDATES` (default 20) post-filter candidates.
+- Timeout: `SEARCH_RERANK_TIMEOUT_MS` (default 150ms) — fail-open on exceed.
+- Target: p95 ≤ timeout for a local cross-encoder on ≤20 short texts; cloud CE may need a higher budget.
+- Result `score` remains fused RRF (rerank reorders only; lists may be non-monotonic in score).
 
 ---
 
@@ -179,4 +187,4 @@ Export path: structured logs today; **E7** OTel later.
 
 - Roadmap: `CodeOracle-planning/enterprise-roadmap-2026-09.md`  
 - Retrieval README: `packages/retrieval/README.md`  
-- Issues: E0 #40, E1 #45, E3 #47, E2 #46, E8 #44 (done), P0-A #41 (done), P0-B #43 (done)
+- Issues: E0 #40, E1 #45, E3 #46, E2 #47, E8 #44 (done), P0-A #41 (done), P0-B #43 (done)

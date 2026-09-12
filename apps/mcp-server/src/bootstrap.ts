@@ -77,11 +77,25 @@ export async function bootstrapMcpRuntime(): Promise<McpRuntime> {
 
   const embed = async (texts: string[]) => (await gateway.embed(texts)).vectors;
 
+  // E2: kill-switch defaults off. Real CE provider not shipped — omit `rerank` → identity.
+  const rerankEnabled = env.SEARCH_RERANK_ENABLED;
+
   const runners = {
     findDecision: (async ({ topic, includeHistory }) =>
       findDecision({ db, qdrant, embed, repoId, topic, includeHistory })) satisfies FindDecisionRunner,
     searchCodebase: (async ({ query, topK }) =>
-      searchCodebase({ db, qdrant, embed, repoId, query, topK })) satisfies SearchCodebaseRunner,
+      searchCodebase({
+        db,
+        qdrant,
+        embed,
+        repoId,
+        query,
+        topK,
+        rerankEnabled,
+        rerankMaxCandidates: env.SEARCH_RERANK_MAX_CANDIDATES,
+        rerankTimeoutMs: env.SEARCH_RERANK_TIMEOUT_MS,
+        // rerank: undefined until a cross-encoder / late-interaction adapter exists
+      })) satisfies SearchCodebaseRunner,
     explainFile: (async ({ path }) => explainFile({ db, repoId, path })) satisfies ExplainFileRunner,
   };
 
