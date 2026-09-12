@@ -9,7 +9,7 @@ Vector store helpers + tool-facing retrieval services.
 | Collection | Mode |
 |---|---|
 | `code_chunks` | **Hybrid** when created via `ensureChunksCollection` / `prepareChunksCollectionForFullIndex` (named `dense` + sparse `text`, RRF). Legacy unnamed dense still searchable (dense-only fallback). |
-| `decisions` | Dense only |
+| `decisions` | Hybrid dense + sparse (E4); legacy dense until full reindex |
 
 Sparse vectors use local tokenization (`textToSparseVector`) with **BM25 TF** on documents and raw TF on queries; Qdrant applies `idf` modifier (E3). Tokens hash into a 31-bit index (hashing trick — see `sparse-embed.ts`). Identifiers are split on camelCase / snake_case (raw token kept) so NL queries can overlap symbols. **Query-time** splitting applies immediately; **indexed** sparse weights pick up BM25 (and new tokens) only after a **full** reindex.
 
@@ -47,5 +47,5 @@ Sparse vectors use local tokenization (`textToSparseVector`) with **BM25 TF** on
 
 ## `find_decision`
 
-Dense topic search over `decisions`, then hydrate + citation filter. Results are cut with an **absolute score floor** (default keep only when top ≥ `0.58`) then a **relative score floor** (default keep `score ≥ topScore × 0.85`) and a **display limit** of 3 so mediocre sticky tips and absolute-threshold tails do not ship. Qdrant fetch is wider than the display limit. No reindex required for this policy.
+Dense topic embed + hybrid RRF over `decisions` (E4), then hydrate + citation filter. Floors use **dense evidence** (absolute default `0.58`, relative `topEvidence × 0.85`); display order among survivors is RRF. Sparse-only tips cannot clear the absolute floor. After deploying E4, run a **full** reindex so `decisions` migrates from legacy dense to hybrid (first legacy recreate wipes all decision vectors — reindex every repo). No E2 rerank on this path.
 

@@ -81,6 +81,7 @@ export async function persistDocDecisions(opts: {
       {
         id,
         vector,
+        sparseText: embedText,
         payload: {
           repo_id: opts.repoId,
           decision_id: id,

@@ -49,6 +49,7 @@ export async function persistExtractedDecisions(opts: {
       repoId: opts.repoId,
       vector,
       scoreThreshold: SUPERSEDE_SIMILARITY_THRESHOLD,
+      denseOnly: true,
     });
 
     const matchRows = await getDecisionsByIds(
@@ -63,8 +64,10 @@ export async function persistExtractedDecisions(opts: {
       if (!row || row.supersededBy) continue;
       // P1-A: never link PR/commit archaeology to/from deterministic doc decisions.
       if (row.sourceType === "doc") continue;
-      if (!bestMatch || match.score > bestMatch.score) {
-        bestMatch = { id: row.id, score: match.score, decidedAt: row.decidedAt };
+      // Bind supersede to dense evidence only (never RRF).
+      if (match.evidenceScore < SUPERSEDE_SIMILARITY_THRESHOLD) continue;
+      if (!bestMatch || match.evidenceScore > bestMatch.score) {
+        bestMatch = { id: row.id, score: match.evidenceScore, decidedAt: row.decidedAt };
       }
     }
 
@@ -96,11 +99,13 @@ export async function persistExtractedDecisions(opts: {
       {
         id,
         vector,
+        sparseText: embedText,
         payload: {
           repo_id: opts.repoId,
           decision_id: id,
           topic: item.topic,
           embedding_model_id: opts.embeddingModelId,
+          source_type: opts.sourceType,
         },
       },
     ]);

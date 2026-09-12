@@ -16,7 +16,7 @@ import { logProviderUsage } from "@codeoracle/observability";
 import { bullJobId } from "@codeoracle/queue";
 import type { Queue } from "bullmq";
 import type IORedis from "ioredis";
-import { createQdrantClient, deleteRepoDecisionVectors, prepareChunksCollectionForFullIndex } from "@codeoracle/retrieval";
+import { createQdrantClient, prepareChunksCollectionForFullIndex, prepareDecisionsCollectionForFullIndex } from "@codeoracle/retrieval";
 import { cloneGithubRepo, ensureCloneDir, resolveRepoRoot } from "../crawler/github-clone.js";
 import { crawlGithubHistory, crawlLocalGitHistory } from "../crawler/github-history.js";
 import { listSourceFiles, resolveRepoHeadSha } from "../crawler/walk-files.js";
@@ -71,7 +71,16 @@ export async function runFullIndexSetup(opts: {
         `[full-index] repo=${opts.repoId}: legacy code_chunks recreated as hybrid — all repos' chunk vectors were wiped; reindex every repo`,
       );
     }
-    await deleteRepoDecisionVectors(qdrant, opts.repoId);
+    const decisionsPrep = await prepareDecisionsCollectionForFullIndex(
+      qdrant,
+      vectorSize,
+      opts.repoId,
+    );
+    if (decisionsPrep.action === "recreated-from-legacy") {
+      console.warn(
+        `[full-index] repo=${opts.repoId}: legacy decisions recreated as hybrid — all repos' decision vectors were wiped; reindex every repo`,
+      );
+    }
     await clearIndexRun(opts.redis, opts.repoId);
 
     const isLocal = Boolean(repo.localClonePath);
