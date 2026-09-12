@@ -23,6 +23,7 @@
     "test:golden": "vitest run --config test/golden-queries/vitest.config.ts",
     "test:eval": "INTEGRATION_TEST=1 vitest run --config test/golden-queries/eval.vitest.config.ts",
     "test:retrieval-gates": "pnpm --filter @codeoracle/core-domain test -- test/absolute-score-floor.test.ts test/secret-path-class.test.ts && pnpm --filter @codeoracle/retrieval exec vitest run test/search-codebase.test.ts test/find-decision.test.ts test/explain-file.test.ts && pnpm --filter @codeoracle/cli test -- src/replay/score.test.ts",
+    "audit:ci": "pnpm audit --prod --audit-level=high",
     "typecheck:e2e": "tsc -p test/e2e/tsconfig.json",
     "typecheck:golden": "tsc -p test/golden-queries/tsconfig.json",
     "fixture:sample-repo:tree": "pnpm --filter @codeoracle/worker exec tsx ../../test/fixtures/sample-repo/write-tree-cli.ts",

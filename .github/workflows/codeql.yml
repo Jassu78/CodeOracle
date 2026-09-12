@@ -1,0 +1,51 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly Monday 06:30 UTC
+    - cron: "30 6 * * 1"
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze JavaScript / TypeScript
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      # Required once GitHub code scanning is enabled on the repo (Settings →
+      # Code security). Until then we keep upload:never so analysis still gates CI.
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:javascript-typescript"
+          # Private repos without Code Scanning / GHAS cannot upload SARIF to
+          # the Security tab. Analysis still runs and fails the job on query
+          # errors. Enable code scanning in repo settings to switch to upload.
+          upload: never
+
+      - name: Upload SARIF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-javascript-typescript
+          path: ${{ runner.temp }}/codeql/javascript/results/*.sarif
+          if-no-files-found: ignore
+          retention-days: 14
