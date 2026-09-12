@@ -133,7 +133,7 @@ Full index: `prepareChunksCollectionForFullIndex` (E8) — scoped clear when hyb
 |--------|--------|
 | **hit@3** / **MRR** | Soft NL + exact class (separate slices) |
 | **empty_rate** | Garbage / no-match should be high; in-domain should be low |
-| **p95_ms** (`search_codebase`, `find_decision`) | Latency budget; E5 adds SLOs + cache |
+| **p95_ms** (`search_codebase`, `find_decision`) | Latency budget; see [`docs/ops/latency-slos.md`](../ops/latency-slos.md) (E5 cache + SLOs) |
 | **stale_index_age** | Time since last successful index for repo |
 | **lexical_hit_rate** / **lexical_unavailable** | E1 health |
 | **secret_refuse_count** | P0-A signal (no payload text) |

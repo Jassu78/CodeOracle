@@ -106,6 +106,16 @@ export const EnvSchema = z.object({
    * CPU TEI + bge-reranker-base often needs 400–500 — set that for dogfood ON path.
    */
   SEARCH_RERANK_TIMEOUT_MS: z.coerce.number().int().positive().default(150),
+  /**
+   * E5 Redis query-result cache for MCP search/find. Default on — fail-open on Redis errors.
+   * Replay/eval should leave this off or bypass at the CLI edge.
+   */
+  QUERY_CACHE_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
+  /** TTL for cached tool payloads (seconds). Index epoch also busts keys on reindex. */
+  QUERY_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

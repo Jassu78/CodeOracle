@@ -15,6 +15,8 @@ describe("loadEnv", () => {
     expect(env.SEARCH_RERANK_ENABLED).toBe(false);
     expect(env.SEARCH_RERANK_MAX_CANDIDATES).toBe(20);
     expect(env.SEARCH_RERANK_TIMEOUT_MS).toBe(150);
+    expect(env.QUERY_CACHE_ENABLED).toBe(true);
+    expect(env.QUERY_CACHE_TTL_SECONDS).toBe(600);
   });
 
   it("throws loudly when DATABASE_URL is missing — never silently defaults", () => {
