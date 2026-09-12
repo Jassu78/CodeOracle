@@ -138,6 +138,7 @@ describe.skipIf(!integrationEnabled)("golden-query eval (D5.2)", () => {
         )) {
           await runChunkFile({
             env,
+            providers,
             redis,
             db,
             queue,
