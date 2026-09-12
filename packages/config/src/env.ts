@@ -116,6 +116,25 @@ export const EnvSchema = z.object({
     .transform((v) => v === "true"),
   /** TTL for cached tool payloads (seconds). Index epoch also busts keys on reindex. */
   QUERY_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(600),
+
+  /**
+   * E7 optional OpenTelemetry. Default off — no exporter, no vendor cloud SDK.
+   * When true without OTEL_EXPORTER_OTLP_ENDPOINT, init soft-skips (stderr warning).
+   */
+  OTEL_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  /** OTLP/HTTP base URL (scheme+host+port), e.g. http://127.0.0.1:4318 — no /v1/traces suffix. */
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().url().optional(),
+  ),
+  /** Overrides per-process default (codeoracle-worker / -api / -mcp). */
+  OTEL_SERVICE_NAME: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().min(1).optional(),
+  ),
 });
 export type Env = z.infer<typeof EnvSchema>;
 

@@ -26,6 +26,7 @@ async function main(): Promise<void> {
     const shutdown = async () => {
       await close();
       await closeDb(runtime.env.DATABASE_URL);
+      await runtime.shutdownOtel();
       process.exit(0);
     };
     process.on("SIGINT", () => void shutdown());

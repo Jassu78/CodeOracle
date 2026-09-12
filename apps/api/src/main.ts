@@ -14,7 +14,7 @@ import {
   registerLocalRepo,
   revokeApiToken,
 } from "@codeoracle/db";
-import { createLogger } from "@codeoracle/observability";
+import { createLogger, initOtel } from "@codeoracle/observability";
 import { createQueue, createRedisConnection, bullJobId, checkRateLimit, clientKeyFromRequest, safeReplaceJob } from "@codeoracle/queue";
 import {
   authorizeAdmin,
@@ -60,6 +60,7 @@ async function main() {
     bindHosts: [effectiveBindHost(env.API_HOST)],
     bindKind: "api",
   });
+  const shutdownOtel = await initOtel({ env, defaultServiceName: "codeoracle-api" });
   const allowedRoots = parseAllowedRoots(env.CODEORACLE_ALLOWED_ROOTS);
   const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
 
@@ -316,6 +317,7 @@ async function main() {
     await queue.close();
     await redis.quit();
     await closeDb(env.DATABASE_URL);
+    await shutdownOtel();
     process.exit(0);
   };
   process.on("SIGTERM", () => void shutdown("SIGTERM"));

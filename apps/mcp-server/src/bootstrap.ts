@@ -23,7 +23,7 @@ import {
 } from "@codeoracle/core-domain";
 import { createDb, repos, type Database } from "@codeoracle/db";
 import { ProviderRegistry, createSearchRerankFn } from "@codeoracle/gateway";
-import { logQueryLatency } from "@codeoracle/observability";
+import { initOtel, logQueryLatency, type OtelShutdown } from "@codeoracle/observability";
 import {
   createRedisConnection,
   decisionCacheKey,
@@ -54,6 +54,7 @@ export type McpRuntime = {
   searchCodebase: SearchCodebaseRunner;
   explainFile: ExplainFileRunner;
   createServer: () => ReturnType<typeof createCodeOracleMcpServer>;
+  shutdownOtel: OtelShutdown;
 };
 
 const SEARCH_DENSE_THRESHOLD_DEFAULT = 0.35;
@@ -64,6 +65,7 @@ export async function bootstrapMcpRuntime(): Promise<McpRuntime> {
   loadProjectEnv(projectRoot);
   const env = loadEnv();
   assertProductionSafety(env);
+  const shutdownOtel = await initOtel({ env, defaultServiceName: "codeoracle-mcp" });
 
   if (!env.CODEORACLE_REPO_ID) {
     throw new Error(
@@ -302,5 +304,6 @@ export async function bootstrapMcpRuntime(): Promise<McpRuntime> {
     repoId,
     ...runners,
     createServer: () => createCodeOracleMcpServer(runners),
+    shutdownOtel,
   };
 }
