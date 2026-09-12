@@ -90,6 +90,19 @@ export const EnvSchema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((v) => v === "true"),
+  /**
+   * E2 optional post-fusion rerank kill-switch. Default off until a real
+   * cross-encoder/late-interaction provider is wired and eval shows lift.
+   * When true without an injected rerank fn, search stays identity (fused order).
+   */
+  SEARCH_RERANK_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  /** Max hydrated candidates passed to rerank (latency budget). */
+  SEARCH_RERANK_MAX_CANDIDATES: z.coerce.number().int().positive().default(20),
+  /** Fail-open timeout for a rerank call (ms). */
+  SEARCH_RERANK_TIMEOUT_MS: z.coerce.number().int().positive().default(150),
 });
 export type Env = z.infer<typeof EnvSchema>;
 
