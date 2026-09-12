@@ -106,6 +106,7 @@ describe.skipIf(!integrationEnabled)("stage-2 index pipeline", () => {
         for (const job of chunkJobs) {
           await runChunkFile({
             env,
+            providers,
             redis,
             db,
             queue,

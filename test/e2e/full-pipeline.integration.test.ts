@@ -127,6 +127,7 @@ describe.skipIf(!integrationEnabled)("full pipeline: index → embed → extract
         for (const job of chunkJobs) {
           await runChunkFile({
             env,
+            providers,
             redis,
             db,
             queue,
