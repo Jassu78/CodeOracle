@@ -28,6 +28,16 @@ export function scoreReplaySearch(
   results: SearchHitLike[],
   expect: ReplaySearchCase["expect"],
 ): { passed: boolean; detail: string } {
+  if (expect.expectEmpty) {
+    return {
+      passed: results.length === 0,
+      detail:
+        results.length === 0
+          ? "empty as expected (garbage / no-match class)"
+          : `expected empty, got ${results.length} hit(s)`,
+    };
+  }
+
   const hitAt = expect.hitAt;
   const top = results.slice(0, hitAt);
   const labels = top.map((r) =>

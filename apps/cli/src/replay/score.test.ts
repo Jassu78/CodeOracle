@@ -41,6 +41,19 @@ describe("scoreReplaySearch", () => {
     expect(r.passed).toBe(true);
     expect(r.detail).toMatch(/authorize/);
   });
+
+  it("passes expectEmpty only when there are no hits (P0-B garbage class)", () => {
+    expect(
+      scoreReplaySearch([], { anyOfPathIncludes: [], hitAt: 3, expectEmpty: true }).passed,
+    ).toBe(true);
+    expect(
+      scoreReplaySearch([{ filePath: "a.ts" }], {
+        anyOfPathIncludes: [],
+        hitAt: 3,
+        expectEmpty: true,
+      }).passed,
+    ).toBe(false);
+  });
 });
 
 describe("scoreReplayFind", () => {

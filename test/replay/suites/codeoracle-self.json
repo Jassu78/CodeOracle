@@ -63,6 +63,25 @@
       }
     },
     {
+      "id": "R6-garbage-empty",
+      "tool": "search_codebase",
+      "query": "xyzzy qwerty asdfghjk nonsense-token-9f3a2b1c",
+      "gate": "hard",
+      "expect": {
+        "expectEmpty": true
+      }
+    },
+    {
+      "id": "R7-exact-signature-symbol",
+      "tool": "search_codebase",
+      "query": "verifyGitHubSignature",
+      "gate": "hard",
+      "expect": {
+        "anyOfPathIncludes": ["github-signature.ts", "verifyGitHubSignature"],
+        "hitAt": 3
+      }
+    },
+    {
       "id": "D1-find-hmac",
       "tool": "find_decision",
       "query": "GitHub webhook HMAC signature verification",
