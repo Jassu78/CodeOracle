@@ -46,6 +46,9 @@ jobs:
       - name: Golden fixture + query-set tests (D5.1)
         run: pnpm test:golden
 
+      - name: Retrieval failure-class gates (E11)
+        run: pnpm test:retrieval-gates
+
   compose-smoke-test:
     runs-on: ubuntu-latest
     # Prove Postgres/Redis/Qdrant come up healthy. Real product-path coverage

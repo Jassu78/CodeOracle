@@ -1,0 +1,71 @@
+name: Retrieval eval gate
+
+# E11 — continuous failure-class coverage beyond PR CI.
+# Live product-repo replay stays dogfood-only (needs ready index + real embeds).
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: retrieval-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  failure-class-units:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Soft NL / exact / empty / secrets refuse units
+        run: pnpm test:retrieval-gates
+      - name: Golden fixture set
+        run: pnpm test:golden
+
+  # Integration + sample-repo eval (same stack as CI integration-test).
+  sample-repo-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: docker compose up
+        working-directory: infra/compose
+        run: docker compose up -d
+      - name: Wait healthy
+        working-directory: infra/compose
+        run: |
+          for i in $(seq 1 30); do
+            healthy=$(docker compose ps --format json | grep -c '"Health":"healthy"' || true)
+            if [ "$healthy" -ge 3 ]; then exit 0; fi
+            sleep 5
+          done
+          docker compose logs
+          exit 1
+      - run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgresql://codeoracle:change-me-in-dev@localhost:5432/codeoracle
+      - run: pnpm test:eval
+        env:
+          DATABASE_URL: postgresql://codeoracle:change-me-in-dev@localhost:5432/codeoracle
+          REDIS_URL: redis://localhost:6379
+          QDRANT_URL: http://localhost:6333
+      - if: always()
+        working-directory: infra/compose
+        run: docker compose down -v

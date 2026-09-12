@@ -11,7 +11,7 @@ Complements `test/golden-queries/` (CI fixture) with ops/dogfood regression for 
 | Replay **engine** units (`score` + suite schema load) | **Required CI** via `pnpm test` (`@codeoracle/cli`) | Nothing live — validates scoring + committed suite JSON |
 | `codeoracle replay` against a product repo | **Dogfood / ops only** | Ready index + real embed provider (e.g. Ollama) + Postgres/Qdrant |
 
-Live product-repo replay is **not** a GitHub Actions gate: it depends on a full indexed repo and real embeddings. CI locks ranking/extract behavior on the fixture path; dogfood locks NL/decision quality on real indexes. Do not fake live replay in CI.
+Live product-repo replay is **not** a GitHub Actions gate: it depends on a full indexed repo and real embeddings. CI locks ranking/extract behavior on the fixture path + **E11 failure-class units** (`pnpm test:retrieval-gates`); dogfood locks NL/decision quality on real indexes. See [`docs/ops/retrieval-eval-gate.md`](../../docs/ops/retrieval-eval-gate.md). Do not fake live replay in CI.
 
 ## Design
 

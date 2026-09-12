@@ -2,11 +2,24 @@ import { z } from "zod";
 
 const GateSchema = z.enum(["hard", "soft"]).default("hard");
 
-const SearchExpectSchema = z.object({
-  /** At least one top hit's filePath **or** symbolName must contain one of these substrings. */
-  anyOfPathIncludes: z.array(z.string().min(1)).min(1),
-  hitAt: z.number().int().positive().max(50).default(3),
-});
+const SearchExpectSchema = z
+  .object({
+    /** At least one top hit's filePath **or** symbolName must contain one of these substrings. */
+    anyOfPathIncludes: z.array(z.string().min(1)).default([]),
+    hitAt: z.number().int().positive().max(50).default(3),
+    /** P0-B garbage class — pass only when the tool returns zero hits. */
+    expectEmpty: z.boolean().optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.expectEmpty) return;
+    if (val.anyOfPathIncludes.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "anyOfPathIncludes required unless expectEmpty is true",
+        path: ["anyOfPathIncludes"],
+      });
+    }
+  });
 
 const FindExpectSchema = z.object({
   /** Upper bound on result count (bleed / display-cap guard). */
