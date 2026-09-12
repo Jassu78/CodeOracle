@@ -16,6 +16,10 @@ export const FullIndexJobPayloadSchema = z.object({
 });
 export type FullIndexJobPayload = z.infer<typeof FullIndexJobPayloadSchema>;
 
+/**
+ * BullMQ jobId: `bullJobId("full_index", repoId)` — at most one active full_index per repo.
+ * Child chunk/embed jobs still use a per-run `indexRunId` inside their own jobIds.
+ */
 export const IncrementalReindexJobPayloadSchema = z.object({
   repoId: z.string().uuid(),
   beforeSha: z.string(),

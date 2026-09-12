@@ -1,5 +1,4 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnv, loadProjectEnv, assertProductionSafety, effectiveBindHost, assertLocalClonePathAllowed, parseAllowedRoots } from "@codeoracle/config";
@@ -16,7 +15,7 @@ import {
   revokeApiToken,
 } from "@codeoracle/db";
 import { createLogger } from "@codeoracle/observability";
-import { createQueue, createRedisConnection, bullJobId, checkRateLimit, clientKeyFromRequest } from "@codeoracle/queue";
+import { createQueue, createRedisConnection, bullJobId, checkRateLimit, clientKeyFromRequest, safeReplaceJob } from "@codeoracle/queue";
 import {
   authorizeAdmin,
   authorizeForRepo,
@@ -211,24 +210,34 @@ async function main() {
           return;
         }
 
-        const indexRunId = randomUUID();
-        const fullIndexJobId = bullJobId("full_index", repoId, indexRunId);
-        await queue.add(
-          JOB_NAMES.FULL_INDEX,
-          {
+        const fullIndexJobId = bullJobId("full_index", repoId);
+        const replace = await safeReplaceJob({
+          queue,
+          name: JOB_NAMES.FULL_INDEX,
+          jobId: fullIndexJobId,
+          data: {
             repoId,
             githubFullName: row.githubFullName,
             branch: row.defaultBranch,
           },
-          {
-            jobId: fullIndexJobId,
+          jobOpts: {
             removeOnComplete: 100,
             removeOnFail: 500,
             attempts: 3,
             backoff: { type: "exponential", delay: 5000 },
           },
-        );
-        log.info("Queued full_index", { repoId, jobId: fullIndexJobId });
+        });
+        if (replace === "skipped_active") {
+          log.info("full_index already active", { repoId, jobId: fullIndexJobId });
+          sendJson(res, 202, {
+            queued: false,
+            alreadyIndexing: true,
+            job: JOB_NAMES.FULL_INDEX,
+            jobId: fullIndexJobId,
+          });
+          return;
+        }
+        log.info("Queued full_index", { repoId, jobId: fullIndexJobId, replace });
         sendJson(res, 202, { queued: true, job: JOB_NAMES.FULL_INDEX, jobId: fullIndexJobId });
         return;
       }

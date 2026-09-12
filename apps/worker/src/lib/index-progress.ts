@@ -1,4 +1,5 @@
 import type IORedis from "ioredis";
+import { touchIndexLease } from "./index-lease.js";
 
 const pendingKey = (repoId: string) => `codeoracle:index:${repoId}:pending-files`;
 const failedKey = (repoId: string) => `codeoracle:index:${repoId}:failed-files`;
@@ -26,6 +27,7 @@ export async function beginIndexRun(
     .set(failedKey(repoId), "0")
     .set(kindKey(repoId), kind)
     .exec();
+  await touchIndexLease(redis, repoId);
 }
 
 export async function getIndexRunKind(redis: IORedis, repoId: string): Promise<IndexRunKind> {
@@ -35,6 +37,7 @@ export async function getIndexRunKind(redis: IORedis, repoId: string): Promise<I
 
 export async function markFileComplete(redis: IORedis, repoId: string): Promise<number> {
   const remaining = await redis.decr(pendingKey(repoId));
+  await touchIndexLease(redis, repoId);
   return remaining;
 }
 
@@ -46,6 +49,7 @@ export async function recordFileFailure(redis: IORedis, repoId: string): Promise
     .incr(failedKey(repoId))
     .exec()
     .then((results) => Number(results?.[0]?.[1] ?? 0));
+  await touchIndexLease(redis, repoId);
   return remaining;
 }
 

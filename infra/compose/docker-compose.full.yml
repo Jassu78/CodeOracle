@@ -1,7 +1,8 @@
 # Optional full stack — worker + API alongside the core data services.
 # Run: docker compose -f docker-compose.yml -f docker-compose.full.yml --profile full up -d
 #
-# IMPORTANT: Only one worker replica per REDIS_URL (leader lock enforced in code).
+# IMPORTANT: Default replicas: 1. Multi-worker is supported (E9 index lease + stable
+# full_index jobId); keep replicas: 1 in local compose unless you intentionally scale.
 # These services mount the repo and run via pnpm — local/dev parity only.
 # Built images: see infra/docker/Dockerfile + docker-compose.images.yml (--profile images).
 # MCP stays on the host for editor stdio (`pnpm mcp`); HTTP MCP can use the images profile.

@@ -23,6 +23,7 @@ import { listSourceFiles, resolveRepoHeadSha } from "../crawler/walk-files.js";
 import { flushDeferredPushToQueue } from "../lib/deferred-push.js";
 import { assertIndexedLocalClonePath } from "../lib/assert-indexed-local-clone-path.js";
 import { indexDocDecisionsForRepo } from "../lib/index-doc-decisions.js";
+import { forceReleaseIndexLease, tryAcquireIndexLease } from "../lib/index-lease.js";
 import { beginIndexRun, clearIndexRun, getIndexRunKind, getIndexRunStats, getPendingFileCount } from "../lib/index-progress.js";
 import { queueExtractDecisionsForRepo } from "../lib/queue-extraction-jobs.js";
 
@@ -34,6 +35,12 @@ export async function runFullIndexSetup(opts: {
   db: Database;
   repoId: string;
 }): Promise<{ filesQueued: number; headSha: string }> {
+  const lease = await tryAcquireIndexLease(opts.redis, opts.repoId);
+  if (!lease) {
+    // Retry via BullMQ backoff — do not complete successfully or a full reindex is dropped.
+    throw new Error(`index lease held for repo ${opts.repoId} — retry full_index`);
+  }
+
   const db = opts.db;
   const qdrant = createQdrantClient(opts.env.QDRANT_URL);
   const gateway = new ProviderRegistry({
@@ -46,11 +53,15 @@ export async function runFullIndexSetup(opts: {
   const jobHistoryId = await startJobHistory(db, {
     repoId: opts.repoId,
     jobType: JOB_NAMES.FULL_INDEX,
-    dedupeKey: `full-index:${Date.now()}`,
+    // History row per attempt; single-flight is lease + BullMQ jobId (repo-stable).
+    dedupeKey: `full:${lease.token}`,
   });
 
   const [repo] = await db.select().from(repos).where(eq(repos.id, opts.repoId)).limit(1);
-  if (!repo) throw new Error(`Repo ${opts.repoId} not found`);
+  if (!repo) {
+    await lease.release();
+    throw new Error(`Repo ${opts.repoId} not found`);
+  }
 
   await db.update(repos).set({ indexStatus: "indexing" }).where(eq(repos.id, opts.repoId));
 
@@ -156,11 +167,13 @@ export async function runFullIndexSetup(opts: {
     );
 
     await finishJobHistory(db, jobHistoryId, { status: "done", latencyMs: Date.now() - started });
+    // Renew timer stays until finalize/forceRelease; touchIndexLease covers other workers.
     return { filesQueued: files.length, headSha };
   } catch (err) {
     await db.update(repos).set({ indexStatus: "error" }).where(eq(repos.id, opts.repoId));
     await finishJobHistory(db, jobHistoryId, { status: "error", latencyMs: Date.now() - started });
     await clearIndexRun(opts.redis, opts.repoId);
+    await lease.release();
     throw err;
   }
 }
@@ -186,6 +199,7 @@ export async function finalizeIndexIfComplete(opts: {
       `Index failed repo=${opts.repoId}: all ${stats.total} file jobs failed`,
     );
     await clearIndexRun(opts.redis, opts.repoId);
+    await forceReleaseIndexLease(opts.redis, opts.repoId);
     return false;
   }
 
@@ -203,6 +217,7 @@ export async function finalizeIndexIfComplete(opts: {
       .set({ indexStatus: "ready", lastIncrementalAt: new Date() })
       .where(eq(repos.id, opts.repoId));
     await clearIndexRun(opts.redis, opts.repoId);
+    await forceReleaseIndexLease(opts.redis, opts.repoId);
     // Full-history extract is only for full index. Merged-PR extract on push is G4.10
     // (queued from incremental-reindex when afterSha maps to a merged PR).
     // Doc decisions for changed paths are indexed in incremental-reindex itself.
@@ -222,6 +237,7 @@ export async function finalizeIndexIfComplete(opts: {
     .set({ indexStatus: "ready", lastFullIndexAt: new Date() })
     .where(eq(repos.id, opts.repoId));
   await clearIndexRun(opts.redis, opts.repoId);
+  await forceReleaseIndexLease(opts.redis, opts.repoId);
 
   if (opts.queue) {
     if (opts.providers) {
@@ -351,5 +367,8 @@ export async function markRepoIndexError(
   db: Database,
 ): Promise<void> {
   await db.update(repos).set({ indexStatus: "error" }).where(eq(repos.id, repoId));
-  if (redis) await clearIndexRun(redis, repoId);
+  if (redis) {
+    await clearIndexRun(redis, repoId);
+    await forceReleaseIndexLease(redis, repoId);
+  }
 }

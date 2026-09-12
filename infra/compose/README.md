@@ -29,7 +29,7 @@ docker compose down -v
 
 ## Optional `full` profile (dev parity)
 
-Mounts the monorepo into Node containers and runs worker + API via `pnpm` (install on start — slow first boot). **Not** production images; one worker replica only (leader lock).
+Mounts the monorepo into Node containers and runs worker + API via `pnpm` (install on start — slow first boot). **Not** production images; default **one** worker replica (scale only with matching rebuilt `dist` — see E9 / `apps/worker/README.md`).
 
 ```bash
 # from infra/compose, with a filled-in repo-root .env

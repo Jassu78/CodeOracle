@@ -1,5 +1,4 @@
 import { resolve } from "node:path";
-import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
@@ -15,7 +14,7 @@ import {
   registerGithubRepo,
   registerLocalRepo,
 } from "@codeoracle/db";
-import { createQueue, createRedisConnection, bullJobId } from "@codeoracle/queue";
+import { createQueue, createRedisConnection, bullJobId, safeReplaceJob } from "@codeoracle/queue";
 import { recoverStaleIndexRun } from "@codeoracle/worker";
 
 const projectRoot = resolve(fileURLToPath(new URL("../../../..", import.meta.url)));
@@ -78,24 +77,29 @@ export async function runRepoIndex(repoId: string): Promise<void> {
       return;
     }
 
-    const indexRunId = randomUUID();
-    await queue.add(
-      JOB_NAMES.FULL_INDEX,
-      {
+    const fullIndexJobId = bullJobId("full_index", repoId);
+    const replace = await safeReplaceJob({
+      queue,
+      name: JOB_NAMES.FULL_INDEX,
+      jobId: fullIndexJobId,
+      data: {
         repoId,
         githubFullName: repoRow.githubFullName,
         branch: repoRow.defaultBranch,
       },
-      {
-        jobId: bullJobId("full_index", repoId, indexRunId),
+      jobOpts: {
         removeOnComplete: 100,
         removeOnFail: 500,
         attempts: 3,
         backoff: { type: "exponential", delay: 5000 },
       },
-    );
+    });
 
-    p.log.success(`Queued ${pc.cyan(JOB_NAMES.FULL_INDEX)} for ${repoRow.githubFullName}`);
+    if (replace === "skipped_active") {
+      p.log.warn(`full_index already active for ${repoRow.githubFullName} (${fullIndexJobId})`);
+    } else {
+      p.log.success(`Queued ${pc.cyan(JOB_NAMES.FULL_INDEX)} for ${repoRow.githubFullName}`);
+    }
     p.log.info("Start worker: pnpm worker");
   } finally {
     await queue.close();
