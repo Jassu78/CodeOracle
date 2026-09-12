@@ -1,5 +1,6 @@
 import type { ProviderUsageEvent } from "@codeoracle/contracts";
 import { createLogger } from "./logger.js";
+import { recordDurationMs } from "./trace.js";
 
 const usageLog = createLogger("provider-usage");
 
@@ -13,5 +14,10 @@ export function logProviderUsage(event: ProviderUsageEvent): void {
     tokensUsed: event.tokensUsed,
     success: event.success,
     error: event.error,
+  });
+  recordDurationMs("gateway.provider.latency_ms", event.latencyMs, {
+    kind: event.kind,
+    providerId: event.providerId,
+    success: event.success,
   });
 }

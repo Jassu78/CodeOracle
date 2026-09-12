@@ -17,6 +17,7 @@ export async function listenStdio(runtime: McpRuntime): Promise<void> {
   const shutdown = async () => {
     await server.close();
     await closeDb(runtime.env.DATABASE_URL);
+    await runtime.shutdownOtel();
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown());

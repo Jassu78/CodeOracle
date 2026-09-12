@@ -83,3 +83,18 @@ CLI note: do **not** insert an extra `--` between `pnpm … start` and `decision
 tail -n 5 "$CODEORACLE_RUN/worker.log"
 # expect: "Worker listening for jobs"
 ```
+
+## Optional OpenTelemetry (E7)
+
+Default **off**. No cloud vendor SDK — OTLP/HTTP to a local collector only.
+
+```bash
+# Collector (example)
+docker run --rm -p 4318:4318 otel/opentelemetry-collector-contrib:latest
+
+# In repo .env
+OTEL_ENABLED=true
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+
+# Restart worker + MCP; see docs/ops/otel.md
+```

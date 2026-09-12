@@ -1,7 +1,7 @@
 # Latency SLOs — search_codebase / find_decision (E5)
 
 **Status:** Dogfood targets (not CI gates). E11 owns continuous eval gates.  
-**Measure via:** structured `query_latency` logs (`component=query-cache`).  
+**Measure via:** structured `query_latency` logs (`component=query-cache`). Optional dual-write: OpenTelemetry histograms when `OTEL_ENABLED=true` (see [`otel.md`](./otel.md)).  
 **Never log** query/topic text or chunk bodies.
 
 ## Cache (E5)

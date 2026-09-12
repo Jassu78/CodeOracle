@@ -1,3 +1,5 @@
+import { recordDurationMs } from "./trace.js";
+
 /** Structured latency line — stderr only (MCP stdio owns stdout). Never log query/topic/bodies. */
 export type QueryLatencyFields = {
   tool: "search_codebase" | "find_decision";
@@ -21,4 +23,14 @@ export function logQueryLatency(fields: QueryLatencyFields): void {
       ...fields,
     }),
   );
+  recordDurationMs("retrieval.tool.latency_ms", fields.latencyMs, {
+    tool: fields.tool,
+    cache: fields.cache,
+  });
+  if (fields.latencyEmbedExcludedMs != null) {
+    recordDurationMs("retrieval.tool.latency_embed_excluded_ms", fields.latencyEmbedExcludedMs, {
+      tool: fields.tool,
+      cache: fields.cache,
+    });
+  }
 }

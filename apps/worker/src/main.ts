@@ -11,7 +11,7 @@ import {
 } from "@codeoracle/contracts";
 import { createDb, pruneJobHistory } from "@codeoracle/db";
 import { createQueue, createRedisConnection, createWorker } from "@codeoracle/queue";
-import { createLogger } from "@codeoracle/observability";
+import { createLogger, initOtel, withSpan } from "@codeoracle/observability";
 import { registerGracefulShutdown } from "./lib/graceful-shutdown.js";
 import { handleIndexJobFailure } from "./lib/handle-index-job-failure.js";
 import { recoverAllStaleIndexes } from "./lib/recover-stale-index.js";
@@ -30,6 +30,7 @@ async function main() {
   loadProjectEnv(projectRoot);
   const env = loadEnv();
   assertProductionSafety(env);
+  const shutdownOtel = await initOtel({ env, defaultServiceName: "codeoracle-worker" });
   const providers = loadProvidersConfig(resolve(projectRoot, env.PROVIDERS_CONFIG_PATH));
 
   const connection = createRedisConnection(env.REDIS_URL);
@@ -61,56 +62,63 @@ async function main() {
   const worker = createWorker(
     connection,
     async (job) => {
-      switch (job.name) {
-        case JOB_NAMES.FULL_INDEX: {
-          const payload = job.data as FullIndexJobPayload;
-          const result = await runFullIndexSetup({
-            env,
-            providers,
-            redis: connection,
-            queue,
-            db,
-            repoId: payload.repoId,
-          });
-          log.info("full_index setup complete", { jobId: job.id, repoId: payload.repoId, ...result });
-          return result;
-        }
-        case JOB_NAMES.CHUNK_FILE: {
-          const payload = job.data as ChunkFileJobPayload;
-          return runChunkFile({ env, providers, redis: connection, db, queue, payload });
-        }
-        case JOB_NAMES.EMBED_CHUNKS: {
-          const payload = job.data as EmbedChunksJobPayload;
-          return runEmbedChunks({ env, providers, redis: connection, db, queue, payload });
-        }
-        case JOB_NAMES.EXTRACT_DECISIONS: {
-          const payload = job.data as ExtractDecisionsJobPayload;
-          const result = await runExtractDecisions({
-            env,
-            providers,
-            redis: connection,
-            db,
-            payload,
-          });
-          log.info("extract_decisions complete", { jobId: job.id, repoId: payload.repoId, ...result });
-          return result;
-        }
-        case JOB_NAMES.INCREMENTAL_REINDEX: {
-          const payload = job.data as IncrementalReindexJobPayload;
-          const result = await runIncrementalReindex({
-            env,
-            providers,
-            redis: connection,
-            queue,
-            db,
-            payload,
-          });
-          log.info("incremental_reindex complete", { jobId: job.id, repoId: payload.repoId, ...result });
-          return result;
-        }
-        default:
-          throw new Error(`Unknown job: ${job.name}`);
-      }
+      const repoId = (job.data as { repoId?: string }).repoId;
+      return withSpan(
+        "bullmq.job",
+        { "codeoracle.job.name": job.name, "codeoracle.job.id": job.id ?? "", "codeoracle.repo_id": repoId ?? "" },
+        async () => {
+          switch (job.name) {
+            case JOB_NAMES.FULL_INDEX: {
+              const payload = job.data as FullIndexJobPayload;
+              const result = await runFullIndexSetup({
+                env,
+                providers,
+                redis: connection,
+                queue,
+                db,
+                repoId: payload.repoId,
+              });
+              log.info("full_index setup complete", { jobId: job.id, repoId: payload.repoId, ...result });
+              return result;
+            }
+            case JOB_NAMES.CHUNK_FILE: {
+              const payload = job.data as ChunkFileJobPayload;
+              return runChunkFile({ env, providers, redis: connection, db, queue, payload });
+            }
+            case JOB_NAMES.EMBED_CHUNKS: {
+              const payload = job.data as EmbedChunksJobPayload;
+              return runEmbedChunks({ env, providers, redis: connection, db, queue, payload });
+            }
+            case JOB_NAMES.EXTRACT_DECISIONS: {
+              const payload = job.data as ExtractDecisionsJobPayload;
+              const result = await runExtractDecisions({
+                env,
+                providers,
+                redis: connection,
+                db,
+                payload,
+              });
+              log.info("extract_decisions complete", { jobId: job.id, repoId: payload.repoId, ...result });
+              return result;
+            }
+            case JOB_NAMES.INCREMENTAL_REINDEX: {
+              const payload = job.data as IncrementalReindexJobPayload;
+              const result = await runIncrementalReindex({
+                env,
+                providers,
+                redis: connection,
+                queue,
+                db,
+                payload,
+              });
+              log.info("incremental_reindex complete", { jobId: job.id, repoId: payload.repoId, ...result });
+              return result;
+            }
+            default:
+              throw new Error(`Unknown job: ${job.name}`);
+          }
+        },
+      );
     },
     env.WORKER_CONCURRENCY,
   );
@@ -136,7 +144,10 @@ async function main() {
   await registerGracefulShutdown({
     worker,
     redis: connection,
-    onShutdown: leaderLock.release,
+    onShutdown: async () => {
+      await leaderLock.release();
+      await shutdownOtel();
+    },
   });
 }
 
