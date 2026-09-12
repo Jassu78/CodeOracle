@@ -17,8 +17,11 @@ This folder is reserved for reusable CI helper scripts if they outgrow the workf
 | `compose-smoke-test` | Infra startup | Compose Postgres + Redis + Qdrant healthy |
 | `integration-test` | Product path (D5.4 e2e) | `pnpm build` → migrate → `pnpm test:integration` |
 | | Golden eval (D5.2) | `pnpm test:eval` (hit@3 ≥80%, citation 100%) |
+| `dependency-audit` | E10 supply-chain | `pnpm audit:ci` (prod, fail on high/critical) — see [`docs/ops/dependency-audit.md`](../../docs/ops/dependency-audit.md) |
 
-All of the above use the checked-in sample-repo fixture + fake OpenAI-compatible provider — **no** GitHub/Ollama/cloud network on the required path (₹0 / offline CI).
+**Also on PRs / main (separate workflow):** CodeQL JavaScript/TypeScript — `.github/workflows/codeql.yml`.
+
+All product-path jobs above use the checked-in sample-repo fixture + fake OpenAI-compatible provider — **no** GitHub/Ollama/cloud network on that path (₹0 / offline CI). Dependency audit and CodeQL need network for the advisory DB / CodeQL pack download.
 
 **Not in CI:** `codeoracle replay` against a product/dogfood index (needs a ready repo + real embeddings). That is an ops gate — see [`test/replay/README.md`](../../test/replay/README.md) and [`infra/dogfood/README.md`](../dogfood/README.md).
 

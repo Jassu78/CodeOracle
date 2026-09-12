@@ -155,3 +155,25 @@ jobs:
         if: always()
         working-directory: infra/compose
         run: docker compose down -v
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    # E10: fail on high/critical production advisories only. Policy:
+    # docs/ops/dependency-audit.md
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm audit (prod, high+)
+        run: pnpm audit:ci
