@@ -4,11 +4,16 @@ import { getOrderedEndpoints } from "@codeoracle/config";
 import { CircuitBreaker, type CircuitBreakerOptions, type CircuitBreakerPort } from "./circuit-breaker.js";
 import { RedisCircuitBreaker } from "./redis-circuit-breaker.js";
 import { OpenAiCompatAdapter, ProviderRequestError } from "./openai-compat-adapter.js";
+import { TeiRerankAdapter } from "./tei-rerank-adapter.js";
 import type {
   ChatProviderPort,
   ChatCompletionResult,
   EmbeddingProviderPort,
   EmbeddingResult,
+  RerankCandidateInput,
+  RerankOptions,
+  RerankProviderPort,
+  RerankResult,
 } from "./ports.js";
 import type { ProviderUsageLogger } from "@codeoracle/contracts";
 
@@ -46,7 +51,9 @@ export type ProviderRegistryOptions = {
   circuitBreaker?: CircuitBreakerPort | CircuitBreakerOptions;
 };
 
-export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort {
+export class ProviderRegistry
+  implements EmbeddingProviderPort, ChatProviderPort, RerankProviderPort
+{
   private readonly config: ProvidersConfig;
   private readonly env: NodeJS.ProcessEnv;
   private readonly onUsage?: ProviderUsageLogger;
@@ -206,6 +213,103 @@ export class ProviderRegistry implements EmbeddingProviderPort, ChatProviderPort
       throw lastError ?? new Error("All chat providers were skipped (circuit-open or missing API key)");
     }
     throw lastError ?? new Error("All chat providers failed");
+  }
+
+  /**
+   * E2.1 TEI cross-encoder. Dogfood is typically one local endpoint — multi-
+   * endpoint failover is best-effort within `opts.timeoutMs`, not multi-hop
+   * under a 150ms budget.
+   */
+  async rerank(
+    query: string,
+    candidates: RerankCandidateInput[],
+    opts: RerankOptions,
+  ): Promise<RerankResult> {
+    if (candidates.length === 0) {
+      const endpoints = getOrderedEndpoints(this.config, "rerank");
+      const first = endpoints[0];
+      return {
+        providerId: first?.id ?? "none",
+        model: first?.model ?? "none",
+        results: [],
+        latencyMs: 0,
+      };
+    }
+
+    const endpoints = getOrderedEndpoints(this.config, "rerank");
+    if (endpoints.length === 0) throw new Error("No enabled rerank providers configured");
+
+    const timeoutMs = Math.max(1, Math.floor(opts.timeoutMs));
+    const deadline = Date.now() + timeoutMs;
+
+    let lastError: unknown;
+    let attempted = 0;
+    for (const endpoint of endpoints) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        lastError = new ProviderRequestError(
+          `Rerank budget exhausted after ${timeoutMs}ms`,
+          408,
+          true,
+        );
+        break;
+      }
+      if (await this.circuits.isOpen(endpoint.id)) continue;
+      if (this.isMissingRequiredKey(endpoint.apiKeyEnv)) {
+        this.emitUsage({
+          providerId: endpoint.id,
+          model: endpoint.model,
+          kind: "rerank",
+          latencyMs: 0,
+          success: false,
+          error: `apiKeyEnv "${endpoint.apiKeyEnv}" is set but empty at request time — skipping endpoint`,
+        });
+        continue;
+      }
+      attempted += 1;
+      const started = Date.now();
+      const signal = AbortSignal.timeout(remaining);
+      try {
+        const adapter = new TeiRerankAdapter(endpoint, this.resolveKey(endpoint.apiKeyEnv));
+        const results = await adapter.rerank(query, candidates, signal);
+        await this.circuits.recordSuccess(endpoint.id);
+        const result: RerankResult = {
+          providerId: endpoint.id,
+          model: endpoint.model,
+          results,
+          latencyMs: Date.now() - started,
+        };
+        this.emitUsage({
+          providerId: endpoint.id,
+          model: endpoint.model,
+          kind: "rerank",
+          latencyMs: result.latencyMs,
+          success: true,
+        });
+        return result;
+      } catch (err) {
+        lastError = err;
+        if (err instanceof ProviderRequestError) {
+          await this.circuits.recordFailure(endpoint.id, err.status);
+        }
+        this.emitUsage({
+          providerId: endpoint.id,
+          model: endpoint.model,
+          kind: "rerank",
+          latencyMs: Date.now() - started,
+          success: false,
+          // formatProviderError never includes candidate/query bodies for TEI.
+          error: formatProviderError(err),
+        });
+        if (err instanceof ProviderRequestError && !err.retryable) {
+          continue;
+        }
+      }
+    }
+    if (attempted === 0) {
+      throw lastError ?? new Error("All rerank providers were skipped (circuit-open or missing API key)");
+    }
+    throw lastError ?? new Error("All rerank providers failed");
   }
 
   primaryEmbeddingModelId(): string {

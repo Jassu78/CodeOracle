@@ -91,9 +91,9 @@ export const EnvSchema = z.object({
     .default("true")
     .transform((v) => v === "true"),
   /**
-   * E2 optional post-fusion rerank kill-switch. Default off until a real
-   * cross-encoder/late-interaction provider is wired and eval shows lift.
-   * When true without an injected rerank fn, search stays identity (fused order).
+   * E2/E2.1 post-fusion rerank kill-switch. Default off until eval shows lift.
+   * When true, apps inject TEI via providers.yaml `rerank:` (see providers.yaml.example).
+   * Without enabled endpoints, search stays identity (fused order).
    */
   SEARCH_RERANK_ENABLED: z
     .enum(["true", "false"])
@@ -101,7 +101,10 @@ export const EnvSchema = z.object({
     .transform((v) => v === "true"),
   /** Max hydrated candidates passed to rerank (latency budget). */
   SEARCH_RERANK_MAX_CANDIDATES: z.coerce.number().int().positive().default(20),
-  /** Fail-open timeout for a rerank call (ms). */
+  /**
+   * Fail-open timeout for a rerank call (ms). Default 150 is a local-CE target;
+   * CPU TEI + bge-reranker-base often needs 400–500 — set that for dogfood ON path.
+   */
   SEARCH_RERANK_TIMEOUT_MS: z.coerce.number().int().positive().default(150),
 });
 export type Env = z.infer<typeof EnvSchema>;

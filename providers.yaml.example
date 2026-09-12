@@ -1,6 +1,7 @@
-# CodeOracle universal OpenAI-compatible provider config.
-# Copy to providers.yaml. Adding a provider is a config change here — never a code change.
-# Every entry speaks /v1/chat/completions or /v1/embeddings.
+# CodeOracle provider config.
+# Copy to providers.yaml.
+# chat / embeddings: OpenAI-compatible `/v1/chat/completions` and `/v1/embeddings`.
+# rerank (E2.1): Hugging Face TEI `POST /rerank` — not OpenAI-compat (dedicated schema).
 
 chat:
   # Priority order: lower number tried first. On 429/5xx/network error, next enabled
@@ -59,3 +60,20 @@ embeddings:
     model: nomic-embed-text
     priority: 1
     enabled: true
+
+# Optional E2.1 local cross-encoder (TEI). Keep disabled until TEI is running.
+# Do not co-locate with a large Ollama chat model on 12GB dogfood hosts (~1–2GB+ TEI).
+# Privacy: prefer local TEI — candidate texts include chunk bodies after P0-A refuse.
+# Enable path:
+#   1. Start TEI with BAAI/bge-reranker-base (see docs/architecture/fused-retrieval.md)
+#   2. Set enabled: true below
+#   3. SEARCH_RERANK_ENABLED=true and SEARCH_RERANK_TIMEOUT_MS=400–500 for CPU
+rerank:
+  - id: tei-rerank-local
+    protocol: tei
+    baseUrl: http://localhost:8080
+    apiKeyEnv: null
+    # Metadata for usage logs; the TEI container chooses the served weights.
+    model: BAAI/bge-reranker-base
+    priority: 1
+    enabled: false

@@ -4,6 +4,7 @@ import {
   ProvidersConfigSchema,
   type ProvidersConfig,
   type OpenAiCompatEndpoint,
+  type RerankEndpoint,
 } from "@codeoracle/contracts";
 
 export class ProvidersConfigError extends Error {
@@ -12,6 +13,8 @@ export class ProvidersConfigError extends Error {
     this.name = "ProvidersConfigError";
   }
 }
+
+type KeyedEndpoint = { id: string; enabled: boolean; apiKeyEnv: string | null };
 
 /**
  * Loads providers.yaml and validates it against the shared contract schema.
@@ -51,7 +54,11 @@ export function loadProvidersConfig(
     throw new ProvidersConfigError(`Invalid providers config in ${filePath}:\n${formatted}`);
   }
 
-  const allEndpoints = [...result.data.chat, ...result.data.embeddings];
+  const allEndpoints: KeyedEndpoint[] = [
+    ...result.data.chat,
+    ...result.data.embeddings,
+    ...result.data.rerank,
+  ];
   for (const endpoint of allEndpoints) {
     assertEnabledEndpointIsUsable(endpoint, env);
   }
@@ -59,12 +66,9 @@ export function loadProvidersConfig(
   return result.data;
 }
 
-function assertEnabledEndpointIsUsable(
-  endpoint: OpenAiCompatEndpoint,
-  env: NodeJS.ProcessEnv,
-): void {
+function assertEnabledEndpointIsUsable(endpoint: KeyedEndpoint, env: NodeJS.ProcessEnv): void {
   if (!endpoint.enabled) return;
-  if (!endpoint.apiKeyEnv) return; // local endpoints (e.g. Ollama) may need no key
+  if (!endpoint.apiKeyEnv) return; // local endpoints (e.g. Ollama / TEI) may need no key
 
   const value = env[endpoint.apiKeyEnv];
   if (!value || value.trim() === "") {
@@ -79,7 +83,15 @@ function assertEnabledEndpointIsUsable(
 export function getOrderedEndpoints(
   config: ProvidersConfig,
   kind: "chat" | "embeddings",
-): OpenAiCompatEndpoint[] {
+): OpenAiCompatEndpoint[];
+export function getOrderedEndpoints(config: ProvidersConfig, kind: "rerank"): RerankEndpoint[];
+export function getOrderedEndpoints(
+  config: ProvidersConfig,
+  kind: "chat" | "embeddings" | "rerank",
+): OpenAiCompatEndpoint[] | RerankEndpoint[] {
+  if (kind === "rerank") {
+    return [...config.rerank].filter((e) => e.enabled).sort((a, b) => a.priority - b.priority);
+  }
   const list = kind === "chat" ? config.chat : config.embeddings;
-  return list.filter((e) => e.enabled).sort((a, b) => a.priority - b.priority);
+  return [...list].filter((e) => e.enabled).sort((a, b) => a.priority - b.priority);
 }

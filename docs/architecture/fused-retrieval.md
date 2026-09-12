@@ -46,7 +46,7 @@ query
   → Postgres hydrate
   → P0-A mustRefuseSecretRetrieval (path + payload)
   → P0-B absolute dense-evidence floor (search)
-  → optional learned rerank (E2 — `SEARCH_RERANK_ENABLED`, default off; after hydrate, before diversify)
+  → optional learned rerank (E2/E2.1 — `SEARCH_RERANK_ENABLED`, default off; after hydrate, before diversify; TEI CE when configured)
   → diversifyByFilePath (+ doc quota)
   → citation / Zod → results (may be empty)
 ```
@@ -160,16 +160,27 @@ Export path: structured logs today; **E7** OTel later.
 |-------|---------------|--------|
 | Retrieve | Dense + sparse hybrid RRF | + lexical channel (E1) |
 | Sparse quality | Hash bag + IDF | **E3:** BM25 TF (doc) + Qdrant IDF; full reindex required (`sparse_encoder=bm25-tf-v1`) |
-| Rerank | Hook + kill-switch (`SEARCH_RERANK_ENABLED=false`) | Optional CE/late-interaction provider (E2.1) when eval shows lift |
+| Rerank | Hook + TEI provider (E2.1); kill-switch default off | Leave default off until eval shows lift; cloud CE later if needed |
 | Floors / refuse | P0-A + P0-B | Keep; extend for lexical (E1) |
 | Isolation | E8 scoped full-index clear | Keep |
 
-### E2 latency budget
+### E2 / E2.1 latency budget
 
 - Cap: ≤ `SEARCH_RERANK_MAX_CANDIDATES` (default 20) post-filter candidates.
 - Timeout: `SEARCH_RERANK_TIMEOUT_MS` (default 150ms) — fail-open on exceed.
-- Target: p95 ≤ timeout for a local cross-encoder on ≤20 short texts; cloud CE may need a higher budget.
+- **Primary cancel path:** gateway `TeiRerankAdapter` uses `AbortSignal.timeout(remainingBudget)` ≤ outer timeout. Retrieval `withTimeout` is defense-in-depth only (it does not abort fetch).
+- Target: p95 ≤ timeout for a local cross-encoder on ≤20 short texts.
+- **Dogfood CPU TEI** (`BAAI/bge-reranker-base`): set timeout to **400–500ms**; stock 150ms often fail-opens on CPU.
 - Result `score` remains fused RRF (rerank reorders only; lists may be non-monotonic in score).
+
+### E2.1 enable (local TEI)
+
+1. Run TEI with a small CE, e.g. `BAAI/bge-reranker-base` on `http://localhost:8080` (not in default Compose — RAM; avoid alongside large Ollama chat on 12GB hosts).
+2. In `providers.yaml`, enable the example `tei-rerank-local` entry (`protocol: tei`).
+3. Set `SEARCH_RERANK_ENABLED=true` and `SEARCH_RERANK_TIMEOUT_MS=400` (or 500).
+4. MCP and `pnpm cli replay` share the same inject rule via `createSearchRerankFn`.
+5. Privacy: prefer **local** TEI — candidates include chunk bodies (post P0-A). Do not point `baseUrl` at a third-party host without an egress review.
+6. Keep default-off in shared `.env` until goldens/replay show lift.
 
 ---
 

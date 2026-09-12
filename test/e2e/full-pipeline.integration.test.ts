@@ -88,6 +88,7 @@ describe.skipIf(!integrationEnabled)("full pipeline: index → embed → extract
             enabled: true,
           },
         ],
+        rerank: [],
       };
 
       const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
