@@ -46,7 +46,7 @@ async function main() {
   if (pruned > 0) log.info("Pruned old job_history rows", { count: pruned });
 
   if (env.INDEX_RECOVER_ON_STARTUP) {
-    const recovered = await recoverAllStaleIndexes({ env, redis: connection, db, queue });
+    const recovered = await recoverAllStaleIndexes({ env, providers, redis: connection, db, queue });
     for (const result of recovered) {
       if (result.action !== "unchanged") {
         log.warn("Recovered stale index run", {
@@ -77,7 +77,7 @@ async function main() {
         }
         case JOB_NAMES.CHUNK_FILE: {
           const payload = job.data as ChunkFileJobPayload;
-          return runChunkFile({ env, redis: connection, db, queue, payload });
+          return runChunkFile({ env, providers, redis: connection, db, queue, payload });
         }
         case JOB_NAMES.EMBED_CHUNKS: {
           const payload = job.data as EmbedChunksJobPayload;
@@ -99,6 +99,7 @@ async function main() {
           const payload = job.data as IncrementalReindexJobPayload;
           const result = await runIncrementalReindex({
             env,
+            providers,
             redis: connection,
             queue,
             db,
@@ -116,7 +117,7 @@ async function main() {
 
   worker.on("failed", async (job, err) => {
     log.error("Job failed", { jobId: job?.id, jobName: job?.name, err: (err as Error).message });
-    await handleIndexJobFailure({ env, redis: connection, db, queue, job, err: err as Error });
+    await handleIndexJobFailure({ env, providers, redis: connection, db, queue, job, err: err as Error });
 
     const repoId = (job?.data as { repoId?: string } | undefined)?.repoId;
     if (job?.name === JOB_NAMES.FULL_INDEX && repoId && job.attemptsMade >= (job.opts.attempts ?? 1)) {

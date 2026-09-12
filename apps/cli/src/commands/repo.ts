@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { count, eq } from "drizzle-orm";
-import { loadEnv, loadProjectEnv, assertLocalClonePathAllowed, parseAllowedRoots } from "@codeoracle/config";
+import { loadEnv, loadProjectEnv, loadProvidersConfig, assertLocalClonePathAllowed, parseAllowedRoots } from "@codeoracle/config";
 import { JOB_NAMES } from "@codeoracle/contracts";
 import {
   chunks,
@@ -107,6 +107,7 @@ export async function runRepoIndex(repoId: string): Promise<void> {
 export async function runRepoRecover(repoId: string): Promise<void> {
   loadProjectEnv(projectRoot);
   const env = loadEnv();
+  const providers = loadProvidersConfig(resolve(projectRoot, env.PROVIDERS_CONFIG_PATH));
   const db = createDb(env.DATABASE_URL, env.DB_POOL_MAX);
   const connection = createRedisConnection(env.REDIS_URL);
   const queue = createQueue(connection);
@@ -114,6 +115,7 @@ export async function runRepoRecover(repoId: string): Promise<void> {
   try {
     const result = await recoverStaleIndexRun({
       env,
+      providers,
       redis: connection,
       db,
       queue,

@@ -33,7 +33,7 @@ describe("DecisionSchema", () => {
     expect(() => DecisionSchema.parse({ ...valid, sourceType: "slack_message" })).toThrow();
   });
 
-  it("accepts all three schema-defined source types, incl. out-of-MVP review_comment", () => {
+  it("accepts all schema-defined source types including doc and review_comment", () => {
     for (const t of DecisionSourceType.options) {
       expect(() => DecisionSchema.parse({ ...valid, sourceType: t })).not.toThrow();
     }

@@ -8,11 +8,13 @@ import type { Env } from "@codeoracle/config";
 import {
   JOB_NAMES,
   type IncrementalReindexJobPayload,
+  type ProvidersConfig,
 } from "@codeoracle/contracts";
 import {
   chunks,
   deleteChunksByFilePath,
   deleteChunksByIds,
+  deleteDocDecisionsTouchingPaths,
   findJobHistoryByKey,
   finishJobHistory,
   listChunksByFilePath,
@@ -23,6 +25,7 @@ import {
 import {
   classifyGithubCompareFiles,
   classifyNameStatusLines,
+  isDecisionShapedDocPath,
   planChunkSync,
   type FileChange,
 } from "@codeoracle/core-domain";
@@ -30,6 +33,7 @@ import { bullJobId } from "@codeoracle/queue";
 import {
   createQdrantClient,
   deleteChunkVectorsByIds,
+  deleteDecisionVectorsByIds,
 } from "@codeoracle/retrieval";
 import type { Queue } from "bullmq";
 import type IORedis from "ioredis";
@@ -42,6 +46,7 @@ import {
 } from "../crawler/walk-files.js";
 import { recordDeferredPush } from "../lib/deferred-push.js";
 import { beginIndexRun, clearIndexRun, markFileComplete } from "../lib/index-progress.js";
+import { indexDocDecisionsForRepo } from "../lib/index-doc-decisions.js";
 import { queueExtractDecisionsForSourceIds } from "../lib/queue-extraction-jobs.js";
 import { syncMergedPrsAtCommit } from "../lib/sync-merged-pr-at-commit.js";
 import { finalizeIndexIfComplete } from "./full-index.js";
@@ -102,6 +107,7 @@ export type IncrementalReindexResult = {
  */
 export async function runIncrementalReindex(opts: {
   env: Env;
+  providers: ProvidersConfig;
   redis: IORedis;
   queue: Queue;
   db: Database;
@@ -215,6 +221,37 @@ export async function runIncrementalReindex(opts: {
     for (const file of deleted) {
       const removed = await deleteChunksByFilePath(opts.db, repoId, file.path);
       await deleteChunkVectorsByIds(qdrant, removed.qdrantPointIds);
+    }
+
+    const deletedDocPaths = deleted.map((f) => f.path).filter((p) => isDecisionShapedDocPath(p));
+    if (deletedDocPaths.length > 0) {
+      const removedDocIds = await deleteDocDecisionsTouchingPaths(opts.db, repoId, deletedDocPaths);
+      await deleteDecisionVectorsByIds(qdrant, removedDocIds);
+    }
+
+    const upsertDocPaths = upserts.map((f) => f.path).filter((p) => isDecisionShapedDocPath(p));
+    if (upsertDocPaths.length > 0) {
+      try {
+        const docResult = await indexDocDecisionsForRepo({
+          env: opts.env,
+          providers: opts.providers,
+          redis: opts.redis,
+          db: opts.db,
+          repoId,
+          sourceSha: afterSha,
+          repoRoot,
+          onlyPaths: upsertDocPaths,
+        });
+        if (docResult.inserted > 0 || docResult.filesConsidered > 0) {
+          console.info(
+            `[doc-decisions] incremental repo=${repoId}: files=${docResult.filesConsidered} inserted=${docResult.inserted}`,
+          );
+        }
+      } catch (err) {
+        console.warn(
+          `[doc-decisions] incremental repo=${repoId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
     await beginIndexRun(opts.redis, repoId, upserts.length, "incremental");

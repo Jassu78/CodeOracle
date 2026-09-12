@@ -1,5 +1,5 @@
 import type { Env } from "@codeoracle/config";
-import { JOB_NAMES, type EmbedChunksJobPayload } from "@codeoracle/contracts";
+import { JOB_NAMES, type EmbedChunksJobPayload, type ProvidersConfig } from "@codeoracle/contracts";
 import { markChunksEmbeddingStatus, type Database } from "@codeoracle/db";
 import type { Job } from "bullmq";
 import type IORedis from "ioredis";
@@ -15,6 +15,7 @@ export function isJobAttemptsExhausted(job: Job): boolean {
 /** G2.05 — per-file job failure must still advance the index run counter. */
 export async function handleIndexJobFailure(opts: {
   env: Env;
+  providers: ProvidersConfig;
   redis: IORedis;
   db: Database;
   queue: import("bullmq").Queue;
@@ -43,6 +44,7 @@ export async function handleIndexJobFailure(opts: {
   await recordFileFailure(opts.redis, repoId);
   await finalizeIndexIfComplete({
     env: opts.env,
+    providers: opts.providers,
     redis: opts.redis,
     db: opts.db,
     repoId,

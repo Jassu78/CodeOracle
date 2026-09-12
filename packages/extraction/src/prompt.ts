@@ -1,7 +1,7 @@
 import type { DecisionSourceType } from "@codeoracle/contracts";
 
 export type ExtractionSourceContext = {
-  sourceType: Exclude<DecisionSourceType, "review_comment">;
+  sourceType: Exclude<DecisionSourceType, "review_comment" | "doc">;
   title: string;
   body: string;
   sourceUrl: string;

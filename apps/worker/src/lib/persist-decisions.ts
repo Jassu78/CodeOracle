@@ -61,6 +61,8 @@ export async function persistExtractedDecisions(opts: {
     for (const match of matches) {
       const row = matchById.get(match.id);
       if (!row || row.supersededBy) continue;
+      // P1-A: never link PR/commit archaeology to/from deterministic doc decisions.
+      if (row.sourceType === "doc") continue;
       if (!bestMatch || match.score > bestMatch.score) {
         bestMatch = { id: row.id, score: match.score, decidedAt: row.decidedAt };
       }

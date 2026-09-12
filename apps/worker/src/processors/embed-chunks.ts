@@ -55,6 +55,7 @@ export async function runEmbedChunks(opts: {
         db: opts.db,
         repoId: opts.payload.repoId,
         queue: opts.queue,
+        providers: opts.providers,
       });
       return { embedded: 0 };
     }
@@ -115,6 +116,7 @@ export async function runEmbedChunks(opts: {
       db: opts.db,
       repoId: opts.payload.repoId,
       queue: opts.queue,
+      providers: opts.providers,
     });
 
     return { embedded };

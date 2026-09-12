@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { Queue } from "bullmq";
 import type IORedis from "ioredis";
 import type { Env } from "@codeoracle/config";
-import { JOB_NAMES } from "@codeoracle/contracts";
+import { JOB_NAMES, type ProvidersConfig } from "@codeoracle/contracts";
 import { repos, type Database } from "@codeoracle/db";
 import {
   finalizeIndexIfComplete,
@@ -28,6 +28,7 @@ async function countActiveRepoJobs(queue: Queue, repoId: string): Promise<number
 
 export async function recoverStaleIndexRun(opts: {
   env: Env;
+  providers: ProvidersConfig;
   redis: IORedis;
   db: Database;
   queue: Queue;
@@ -45,6 +46,7 @@ export async function recoverStaleIndexRun(opts: {
   if (pending <= 0) {
     const finalized = await finalizeIndexIfComplete({
       env: opts.env,
+      providers: opts.providers,
       redis: opts.redis,
       db: opts.db,
       repoId: opts.repoId,
@@ -86,16 +88,21 @@ export async function recoverStaleIndexRun(opts: {
 
 export async function recoverAllStaleIndexes(opts: {
   env: Env;
+  providers: ProvidersConfig;
   redis: IORedis;
   db: Database;
   queue: Queue;
 }): Promise<RecoverResult[]> {
-  const indexing = await opts.db.select({ id: repos.id }).from(repos).where(eq(repos.indexStatus, "indexing"));
+  const indexing = await opts.db
+    .select({ id: repos.id })
+    .from(repos)
+    .where(eq(repos.indexStatus, "indexing"));
   const results: RecoverResult[] = [];
   for (const row of indexing) {
     results.push(
       await recoverStaleIndexRun({
         env: opts.env,
+        providers: opts.providers,
         redis: opts.redis,
         db: opts.db,
         queue: opts.queue,

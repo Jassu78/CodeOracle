@@ -10,6 +10,40 @@ export async function clearRepoDecisions(db: Database, repoId: string): Promise<
   await db.delete(decisions).where(eq(decisions.repoId, repoId));
 }
 
+/**
+ * Delete doc-sourced decisions whose touched_paths include any of `paths`.
+ * Returns deleted decision ids (for Qdrant cleanup).
+ */
+export async function deleteDocDecisionsTouchingPaths(
+  db: Database,
+  repoId: string,
+  paths: string[],
+): Promise<string[]> {
+  const normalized = [...new Set(paths.map((p) => p.trim().replace(/\\/g, "/")).filter(Boolean))];
+  if (normalized.length === 0) return [];
+
+  const rows = await db
+    .select({ id: decisions.id })
+    .from(decisions)
+    .where(
+      and(
+        eq(decisions.repoId, repoId),
+        eq(decisions.sourceType, "doc"),
+        sql`EXISTS (
+          SELECT 1
+          FROM unnest(${decisions.touchedPaths}) AS tp
+          WHERE tp = ANY(${normalized})
+        )`,
+      ),
+    );
+
+  const ids = rows.map((r) => r.id);
+  if (ids.length === 0) return [];
+
+  await db.delete(decisions).where(inArray(decisions.id, ids));
+  return ids;
+}
+
 export async function listDecisionsForReview(
   db: Database,
   repoId: string,
@@ -73,7 +107,7 @@ export async function markDecisionSuperseded(
 
 export type PersistOneDecisionOpts = {
   repoId: string;
-  sourceType: "pr" | "commit";
+  sourceType: "pr" | "commit" | "doc";
   sourceUrl: string;
   sourceSha: string;
   decidedAt: Date;

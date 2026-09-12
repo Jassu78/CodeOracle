@@ -40,7 +40,7 @@ export function createCodeOracleMcpServer(opts: CreateCodeOracleMcpServerOpts): 
     "find_decision",
     {
       description:
-        "Find architectural decisions (WHY) for a topic. Returns summaries, alternatives, confidence, and a mandatory source URL (PR or commit).",
+        "Find architectural decisions (WHY) for a topic. Returns summaries, alternatives, confidence, and a mandatory source URL (PR, commit, or decision-shaped doc blob).",
       inputSchema: {
         topic: z.string().min(1).describe("Topic or question, e.g. 'session store' or 'why Postgres'"),
         includeHistory: z

@@ -89,3 +89,19 @@ export async function deleteRepoDecisionVectors(
     },
   });
 }
+
+/** Point-id deletes for incremental doc decision replace. */
+export async function deleteDecisionVectorsByIds(
+  client: QdrantClient,
+  ids: string[],
+): Promise<void> {
+  if (ids.length === 0) return;
+  const collections = await client.getCollections();
+  const exists = collections.collections.some((c) => c.name === DECISIONS_COLLECTION);
+  if (!exists) return;
+
+  await client.delete(DECISIONS_COLLECTION, {
+    wait: true,
+    points: ids,
+  });
+}
