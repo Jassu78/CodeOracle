@@ -132,6 +132,7 @@ describe("findDecision", () => {
       sourceUrl: "https://github.com/org/repo/pull/1",
       superseded: false,
       confidence: 0.9,
+      retrievalScore: 0.91,
     });
     expect(search).toHaveBeenCalledWith(
       expect.objectContaining({

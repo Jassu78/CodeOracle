@@ -48,8 +48,14 @@ export type FindDecisionOpts = {
   deps?: FindDecisionDeps;
 };
 
-type InternalHit = FindDecisionOutput["results"][number] & {
+type InternalHit = {
   id: string;
+  topic: string;
+  summary: string;
+  alternativesConsidered: string[];
+  sourceUrl: string;
+  confidence: number;
+  superseded: boolean;
   rrfScore: number;
   evidenceScore: number;
 };
@@ -149,7 +155,10 @@ export async function findDecision(opts: FindDecisionOpts): Promise<FindDecision
   // Display: RRF among survivors, then displayLimit.
   afterRelative.sort((a, b) => b.rrfScore - a.rrfScore);
   const results = afterRelative.slice(0, displayLimit).map(
-    ({ id: _id, rrfScore: _rrf, evidenceScore: _ev, score: _s, ...rest }) => rest,
+    ({ id: _id, rrfScore, evidenceScore: _ev, score: _s, ...rest }) => ({
+      ...rest,
+      retrievalScore: rrfScore,
+    }),
   );
 
   return FindDecisionOutputSchema.parse({ results });

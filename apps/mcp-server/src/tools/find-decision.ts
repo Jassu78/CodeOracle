@@ -38,7 +38,7 @@ export function formatFindDecisionText(output: FindDecisionOutput): string {
           : "Alternatives: (none recorded)";
       const status = r.superseded ? "superseded" : "active";
       return [
-        `${i + 1}. ${r.topic} [${status}] (confidence=${r.confidence.toFixed(2)})`,
+        `${i + 1}. ${r.topic} [${status}] (confidence=${r.confidence.toFixed(2)}, retrievalScore=${r.retrievalScore.toFixed(4)})`,
         r.summary,
         alts,
         `Source: ${r.sourceUrl}`,
