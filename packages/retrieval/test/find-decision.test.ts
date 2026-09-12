@@ -29,6 +29,11 @@ function row(partial: Partial<DecisionRow> & Pick<DecisionRow, "id" | "topic" | 
 const stubDb = {} as never;
 const stubQdrant = {} as never;
 
+/** Test hit — evidence defaults to ranking score (legacy dense). */
+function hit(id: string, score: number, evidenceScore = score) {
+  return { id, score, evidenceScore };
+}
+
 describe("findDecision", () => {
   it("rejects empty topic / repoId", async () => {
     await expect(
@@ -81,9 +86,9 @@ describe("findDecision", () => {
 
   it("preserves score order, hides superseded by default, drops bad citations", async () => {
     const search = vi.fn(async () => [
-      { id: activeId, score: 0.91 },
-      { id: supersededId, score: 0.8 },
-      { id: noCiteId, score: 0.7 },
+      hit(activeId, 0.91),
+      hit(supersededId, 0.8),
+      hit(noCiteId, 0.7),
     ]);
     const getByIds = vi.fn(async () => [
       row({
@@ -129,15 +134,20 @@ describe("findDecision", () => {
       confidence: 0.9,
     });
     expect(search).toHaveBeenCalledWith(
-      expect.objectContaining({ repoId, scoreThreshold: 0.45, limit: 8 }),
+      expect.objectContaining({
+        repoId,
+        scoreThreshold: 0.45,
+        limit: 8,
+        queryText: "session store",
+      }),
     );
   });
 
   it("drops far neighbors via relative floor (Q2)", async () => {
     const search = vi.fn(async () => [
-      { id: activeId, score: 0.89 },
-      { id: bleedId, score: 0.57 },
-      { id: nearTieId, score: 0.53 },
+      hit(activeId, 0.89),
+      hit(bleedId, 0.57),
+      hit(nearTieId, 0.53),
     ]);
     const getByIds = vi.fn(async () => [
       row({
@@ -174,9 +184,9 @@ describe("findDecision", () => {
 
   it("keeps near-ties within the relative floor band (Q2)", async () => {
     const search = vi.fn(async () => [
-      { id: activeId, score: 0.765 },
-      { id: nearTieId, score: 0.763 },
-      { id: bleedId, score: 0.625 },
+      hit(activeId, 0.765),
+      hit(nearTieId, 0.763),
+      hit(bleedId, 0.625),
     ]);
     const getByIds = vi.fn(async () => [
       row({
@@ -224,8 +234,8 @@ describe("findDecision", () => {
       includeHistory: true,
       deps: {
         search: async () => [
-          { id: activeId, score: 0.9 },
-          { id: supersededId, score: 0.88 },
+          hit(activeId, 0.9),
+          hit(supersededId, 0.88),
         ],
         getByIds: async () => [
           row({
@@ -260,8 +270,8 @@ describe("findDecision", () => {
       topic: "xyzzy unrelated nonsense",
       deps: {
         search: async () => [
-          { id: activeId, score: 0.55 },
-          { id: bleedId, score: 0.52 },
+          hit(activeId, 0.55),
+          hit(bleedId, 0.52),
         ],
         getByIds: async () => [
           row({
@@ -291,8 +301,8 @@ describe("findDecision", () => {
       topic: "HMAC webhook",
       deps: {
         search: async () => [
-          { id: activeId, score: 0.89 },
-          { id: bleedId, score: 0.57 },
+          hit(activeId, 0.89),
+          hit(bleedId, 0.57),
         ],
         getByIds: async () => [
           row({
@@ -311,5 +321,63 @@ describe("findDecision", () => {
       },
     });
     expect(out.results.map((r) => r.topic)).toEqual(["GitHub HMAC webhook verification"]);
+  });
+
+  it("E4: floors on evidenceScore; display order follows RRF among survivors", async () => {
+    // Sparse-boosted tip (high RRF, weak dense) must not clear absolute alone when
+    // a denser hit exists; among survivors clearing floors, higher RRF wins display.
+    const out = await findDecision({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      topic: "hybrid ranking",
+      deps: {
+        search: async () => [
+          hit(bleedId, 0.95, 0.62), // high RRF, lower evidence — still above 0.58 and within 0.85 of top
+          hit(activeId, 0.5, 0.72), // lower RRF, higher evidence (top for relative)
+        ],
+        getByIds: async () => [
+          row({
+            id: bleedId,
+            topic: "Keyword-heavy dual hit",
+            summary: "Sparse agreed.",
+            sourceUrl: "https://github.com/org/repo/pull/s",
+          }),
+          row({
+            id: activeId,
+            topic: "Dense primary tip",
+            summary: "Strong cosine.",
+            sourceUrl: "https://github.com/org/repo/pull/d",
+          }),
+        ],
+      },
+    });
+    expect(out.results.map((r) => r.topic)).toEqual([
+      "Keyword-heavy dual hit",
+      "Dense primary tip",
+    ]);
+  });
+
+  it("E4: sparse-only tips (evidence 0) empty under absolute floor", async () => {
+    const out = await findDecision({
+      db: stubDb,
+      qdrant: stubQdrant,
+      embed: async () => [[0.1]],
+      repoId,
+      topic: "xyzzy",
+      deps: {
+        search: async () => [hit(activeId, 0.9, 0)],
+        getByIds: async () => [
+          row({
+            id: activeId,
+            topic: "Sparse-only sticky",
+            summary: "Must not ship.",
+            sourceUrl: "https://github.com/org/repo/pull/x",
+          }),
+        ],
+      },
+    });
+    expect(out.results).toEqual([]);
   });
 });

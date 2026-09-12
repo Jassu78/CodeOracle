@@ -51,7 +51,7 @@ query
   → citation / Zod → results (may be empty)
 ```
 
-`find_decision` stays a separate path (topic embed → decisions collection → absolute/relative floors). E4 may borrow hybrid ideas; it does **not** share the code-chunk exact lane.
+`find_decision` stays a separate path (topic embed → decisions hybrid RRF (E4) → absolute/relative floors on **dense evidence** → RRF display sort). Strong dense-only tips compete with dual-channel hits; sparse-only tips are dropped before floors. E2 rerank does **not** apply here.
 
 ---
 

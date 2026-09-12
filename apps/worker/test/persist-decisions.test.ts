@@ -8,6 +8,9 @@ describe("persistExtractedDecisions", () => {
     const query = vi.fn(async () => ({ points: [{ id: olderId, score: 0.9 }] }));
     const qdrant = {
       getCollections: vi.fn(async () => ({ collections: [{ name: "decisions" }] })),
+      getCollection: vi.fn(async () => ({
+        config: { params: { sparse_vectors: { text: {} } } },
+      })),
       query,
       upsert,
     } as never;
@@ -85,6 +88,9 @@ describe("persistExtractedDecisions", () => {
     const query = vi.fn(async () => ({ points: [{ id: docId, score: 0.95 }] }));
     const qdrant = {
       getCollections: vi.fn(async () => ({ collections: [{ name: "decisions" }] })),
+      getCollection: vi.fn(async () => ({
+        config: { params: { sparse_vectors: { text: {} } } },
+      })),
       query,
       upsert,
     } as never;

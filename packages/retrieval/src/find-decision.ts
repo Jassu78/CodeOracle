@@ -6,22 +6,25 @@ import {
 import {
   DECISION_ABSOLUTE_SCORE_FLOOR,
   DECISION_RELATIVE_SCORE_FLOOR,
-  applyAbsoluteTopScoreFloor,
   applyRelativeScoreFloor,
+  bestScore,
   decisionSearchFetchLimit,
 } from "@codeoracle/core-domain";
 import { getDecisionsByIds, type Database, type DecisionRow } from "@codeoracle/db";
-import { searchSimilarDecisions } from "./store/decisions.js";
+import {
+  searchSimilarDecisions,
+  type DecisionSearchHit,
+} from "./store/decisions.js";
 import { isHttpUrl, type EmbedFn } from "./util.js";
 
 export type { EmbedFn } from "./util.js";
-
-export type DecisionSearchHit = { id: string; score: number };
+export type { DecisionSearchHit } from "./store/decisions.js";
 
 export type FindDecisionDeps = {
   search: (opts: {
     repoId: string;
     vector: number[];
+    queryText: string;
     limit: number;
     scoreThreshold: number;
   }) => Promise<DecisionSearchHit[]>;
@@ -35,38 +38,26 @@ export type FindDecisionOpts = {
   repoId: string;
   topic: string;
   includeHistory?: boolean;
-  /**
-   * Max results returned after relative floor (display limit). Default 3.
-   * Qdrant fetch is wider (`decisionSearchFetchLimit`) so drops + floor can still fill.
-   */
   limit?: number;
   /**
-   * Cosine score floor for topic search fetch. Looser than supersede (~0.75):
-   * query phrasing rarely matches stored topic embeddings that tightly.
-   * Precision vs the top hit is enforced by `relativeFloor` (Q2).
+   * Dense prefetch cosine floor (hybrid dense channel / legacy). Default 0.45.
    */
   scoreThreshold?: number;
-  /**
-   * Keep hydrated hits with score >= topScore * relativeFloor.
-   * Default 0.85 — live-tuned so HMAC bleed drops while hybrid near-ties stay.
-   */
   relativeFloor?: number;
-  /**
-   * If the best hydrated cosine score is below this, return no results (P0-B).
-   * Default DECISION_ABSOLUTE_SCORE_FLOOR — empties sticky mediocre tips.
-   */
   absoluteMinScore?: number;
-  /** Test seam — production callers omit this. */
   deps?: FindDecisionDeps;
 };
 
-type ScoredDecision = FindDecisionOutput["results"][number] & { score: number };
+type InternalHit = FindDecisionOutput["results"][number] & {
+  id: string;
+  rrfScore: number;
+  evidenceScore: number;
+};
 
 /**
  * Semantic decision lookup for MCP `find_decision`.
- * Embed → Qdrant (repo-scoped) → Postgres hydrate → citation filter →
- * absolute top-score floor (P0-B) → relative score floor vs top hit →
- * display cap → Zod. No LLM in this path.
+ * Embed topic → Qdrant hybrid (E4) → hydrate → citation filter →
+ * absolute/relative floors on **dense evidence** → sort survivors by RRF → Zod.
  */
 export async function findDecision(opts: FindDecisionOpts): Promise<FindDecisionOutput> {
   const topic = opts.topic.trim();
@@ -88,6 +79,7 @@ export async function findDecision(opts: FindDecisionOpts): Promise<FindDecision
       searchSimilarDecisions(opts.qdrant, {
         repoId: args.repoId,
         vector: args.vector,
+        queryText: args.queryText,
         limit: args.limit,
         scoreThreshold: args.scoreThreshold,
       }),
@@ -102,6 +94,7 @@ export async function findDecision(opts: FindDecisionOpts): Promise<FindDecision
   const hits = await deps.search({
     repoId: opts.repoId,
     vector,
+    queryText: topic,
     limit: fetchLimit,
     scoreThreshold,
   });
@@ -114,31 +107,50 @@ export async function findDecision(opts: FindDecisionOpts): Promise<FindDecision
   const byId = new Map(rows.map((r) => [r.id, r]));
 
   const includeHistory = opts.includeHistory ?? false;
-  const scored: ScoredDecision[] = [];
+  const scored: InternalHit[] = [];
 
   for (const hit of hits) {
     const row = byId.get(hit.id);
     if (!row) continue;
     if (!includeHistory && row.supersededBy) continue;
 
-    // Citation is mandatory — skip corrupt rows rather than failing the whole tool.
     const sourceUrl = row.sourceUrl?.trim() ?? "";
     if (!isHttpUrl(sourceUrl)) continue;
 
     scored.push({
+      id: row.id,
       topic: row.topic,
       summary: row.summary,
       alternativesConsidered: row.alternativesConsidered ?? [],
       sourceUrl,
       confidence: row.confidence,
       superseded: Boolean(row.supersededBy),
-      score: hit.score,
+      rrfScore: hit.score,
+      evidenceScore: hit.evidenceScore,
     });
   }
 
-  const absoluteKept = applyAbsoluteTopScoreFloor(scored, { absoluteMin: absoluteMinScore });
-  const kept = applyRelativeScoreFloor(absoluteKept, { relativeFloor, limit: displayLimit });
-  const results = kept.map(({ score: _score, ...rest }) => rest);
+  // P0-B: if best dense evidence is too weak, empty (unsorted OK).
+  if (bestScore(scored.map((h) => ({ score: h.evidenceScore }))) < absoluteMinScore) {
+    return FindDecisionOutputSchema.parse({ results: [] });
+  }
+
+  // Relative floor on evidence vs max evidence.
+  const byEvidenceDesc = [...scored].sort((a, b) => b.evidenceScore - a.evidenceScore);
+  const evidenceAsScore = byEvidenceDesc.map((h) => ({
+    ...h,
+    score: h.evidenceScore,
+  }));
+  const afterRelative = applyRelativeScoreFloor(evidenceAsScore, {
+    relativeFloor,
+    limit: Number.POSITIVE_INFINITY,
+  });
+
+  // Display: RRF among survivors, then displayLimit.
+  afterRelative.sort((a, b) => b.rrfScore - a.rrfScore);
+  const results = afterRelative.slice(0, displayLimit).map(
+    ({ id: _id, rrfScore: _rrf, evidenceScore: _ev, score: _s, ...rest }) => rest,
+  );
 
   return FindDecisionOutputSchema.parse({ results });
 }
