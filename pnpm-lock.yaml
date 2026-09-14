@@ -243,14 +243,14 @@ importers:
         specifier: ^22.0.0
         version: 22.0.1
       bullmq:
-        specifier: ^5.34.8
-        version: 5.81.4
+        specifier: ^5.81.5
+        version: 5.81.5
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(gel@2.2.0)(postgres@3.4.9)
       ignore:
-        specifier: ^7.0.8
-        version: 7.0.8
+        specifier: ^7.0.9
+        version: 7.0.9
       ioredis:
         specifier: ^5.4.2
         version: 5.11.1
@@ -483,8 +483,8 @@ importers:
         specifier: workspace:*
         version: link:../contracts
       bullmq:
-        specifier: ^5.34.8
-        version: 5.81.4
+        specifier: ^5.81.5
+        version: 5.81.5
       ioredis:
         specifier: ^5.4.2
         version: 5.11.1
@@ -2032,8 +2032,8 @@ packages:
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
 
-  bullmq@5.81.4:
-    resolution: {integrity: sha512-n+WHSzz20KooBGoJyASre6oJNz/p5f1IJRRN2ibD+NWPQaNpNQmDrwYuPO+bsXrQeM1MQzUxXGbdjmyOFKP2xQ==}
+  bullmq@5.81.5:
+    resolution: {integrity: sha512-pW7pFc/X+9AEIx91TWTdIpZ1icfbJnA0unsyzD7VICjCUw8a3qedSjej5dxxn6LjfM1kr2jvalOCGbCmoA5Kxg==}
     engines: {node: '>=12.22.0'}
     peerDependencies:
       redis: '>=5.0.0'
@@ -2606,8 +2606,8 @@ packages:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
     engines: {node: '>= 4'}
 
-  ignore@7.0.8:
-    resolution: {integrity: sha512-YYNsSlXBjMk92SKnkwvB5LOVSa6OznlFUGcsvrFgNJbJCd0M1XKeFVRc8ZByeCqz32FivYNHJVooLmdqrmvp/Q==}
+  ignore@7.0.9:
+    resolution: {integrity: sha512-brTTsvFRt5C1gGHtPst/281UjPD5t9fBqbgoMPlVWy11ZLTPfu7HxK4ZYqO9H7o/yC9rSTCI85EaQ4OoY12qYw==}
     engines: {node: '>= 4'}
 
   import-fresh@3.3.1:
@@ -4400,7 +4400,7 @@ snapshots:
       '@typescript-eslint/utils': 8.69.0(eslint@9.39.5)(typescript@5.9.3)
       '@typescript-eslint/visitor-keys': 8.69.0
       eslint: 9.39.5
-      ignore: 7.0.8
+      ignore: 7.0.9
       natural-compare: 1.4.0
       ts-api-utils: 2.5.0(typescript@5.9.3)
       typescript: 5.9.3
@@ -4598,7 +4598,7 @@ snapshots:
 
   buffer-from@1.1.2: {}
 
-  bullmq@5.81.4:
+  bullmq@5.81.5:
     dependencies:
       cron-parser: 4.9.0
       ioredis: 5.11.1
@@ -5208,7 +5208,7 @@ snapshots:
 
   ignore@5.3.2: {}
 
-  ignore@7.0.8: {}
+  ignore@7.0.9: {}
 
   import-fresh@3.3.1:
     dependencies:
