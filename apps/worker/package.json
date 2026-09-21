@@ -26,9 +26,9 @@
     "@codeoracle/queue": "workspace:*",
     "@codeoracle/retrieval": "workspace:*",
     "@octokit/rest": "^22.0.0",
-    "bullmq": "^5.34.8",
+    "bullmq": "^5.81.5",
     "drizzle-orm": "^0.45.2",
-    "ignore": "^7.0.8",
+    "ignore": "^7.0.9",
     "ioredis": "^5.4.2"
   },
   "devDependencies": {
