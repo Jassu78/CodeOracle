@@ -373,4 +373,3 @@ Both projects share a retrieval spine: chunk → embed → hybrid retrieve → c
 - Product brief (*why*): `intro.md`
 - This doc (*how* / engineering): `production-spec.md`
 - Stage PRD / deliverables / success (*execution planning*): `PRD.md`
-- Portfolio of alternative project options: `project_recommendations.html`
