@@ -6,14 +6,97 @@
 [![CI](https://github.com/Jassu78/CodeOracle/actions/workflows/ci.yml/badge.svg)](https://github.com/Jassu78/CodeOracle/actions/workflows/ci.yml)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.11%20%3C25-brightgreen)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-9-F69220)](https://pnpm.io)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)](https://typescriptlang.org/)
 [![MCP](https://img.shields.io/badge/MCP-compatible-black)](https://modelcontextprotocol.io/)
 
 Plug it into Cursor, Claude Code, or any MCP client. Index once. Ask with citations. Stay fresh via GitHub webhooks or a local reindex.
 
-Default path is **₹0 / $0** (local Ollama embeddings). Chat models are optional — only needed to extract architectural decisions.
+**Status:** actively developed. Hybrid **code search** and **file explain** are the strongest paths today. **Decision memory** works end-to-end, but extract quality tracks whatever chat model you configure — we treat that as a known limit and keep improving ranking, prompts, and evals. We do **not** claim “perfect answers out of the box.”
 
-Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md) · Stages 0–5 on `main`
+**Default path is private-by-design:** run the stack on your machine or your VPC; use **local Ollama** (or any local OpenAI-compatible server) for embeddings and, if you want, for decision extract — so source and PR text need not leave your network. Cloud providers are optional, config-only, and never required for search.
+
+Interactive overview: [`docs/demo/index.html`](./docs/demo/index.html) · live site (GitHub Pages): https://jassu78.github.io/CodeOracle/
+
+Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+
+---
+
+## Privacy & offline
+
+CodeOracle is built for teams that want **agent memory without shipping the monorepo to a vendor RAG cloud by default**.
+
+| Mode | What leaves your machine |
+|------|---------------------------|
+| **All-local** (Compose + Ollama embed ± local chat) | Nothing required for search; extract stays local if chat is local |
+| **Local embed + optional cloud chat** | Only texts you send to extract (PR/commit bodies), after secret scrubbing — not a full repo upload product |
+| **Your own VPC** | Same binary; point `providers.yaml` at internal endpoints |
+
+That is the wedge beside “ask the IDE on demand”: a **durable index you operate**, with citations, that can run air-gapped or offline for the search path. Infra and model capacity are still your cost — local does not mean free of hardware.
+
+---
+
+## What this is (and isn’t)
+
+Coding agents are strong at reading **today’s** files in-session. They are weak at durable team memory:
+
+- why Postgres won over the alternative two years ago  
+- which PR recorded an auth edge case  
+- what you already rejected — and why  
+
+That context lives in PR bodies, review threads, and people’s heads. Session to session, the agent forgets.
+
+CodeOracle is a **small, cited memory layer** your agent can call over MCP — not another “chat with the repo” UI, and not a replacement for Cursor’s own indexing.
+
+| Is | Is not |
+|---|---|
+| Hybrid search + decision archive with mandatory citations | A Cursor competitor for general coding |
+| Self-hosted index your team owns | “Upload the monorepo to our cloud” by default |
+| Tools any MCP client can call | Locked to one IDE |
+| Fresh via webhooks / reindex | Magic that invents rationale missing from sources |
+
+**Product test:** if you remove a fancy UI and still have *queryable architectural decisions + cited code search for any coding agent*, you built CodeOracle.
+
+---
+
+## Why not “just ask Cursor”?
+
+Cursor (and similar tools) already do a **quick lookup** of the current tree — and they’re excellent at that. Use them.
+
+CodeOracle is for the layer beside that:
+
+1. **Cited retrieval you own** — ranked chunks with file paths, same contract every time, on hardware you control.  
+2. **Decision memory** — structured WHY mined from git/PR history, with a mandatory source URL (not vibes).  
+3. **Team freshness** — one shared index updated by webhooks, so every engineer’s agent sees the same archive.
+
+If the only job is “find this function in the open repo,” the editor is enough. If the job is “remember why we chose this, with proof, across sessions and teammates,” that’s the gap this project targets — and we’re still sharpening how well extraction fills that gap depending on the chat model you run.
+
+---
+
+## What you get
+
+| Tool | What it does | Needs |
+|------|----------------|-------|
+| `search_codebase` | Hybrid search over indexed chunks | Embeddings |
+| `explain_file` | File chunks + related decisions (no LLM rewrite) | Index |
+| `find_decision` | WHY, alternatives, confidence, source URL | Extract once with a chat model; queries are retrieval only |
+
+**Typical loop:** register a repo → worker indexes → optional decision extract → connect MCP → optional GitHub push webhooks.
+
+**Rules we do not bend**
+
+- **No citation = bug** — every hit has a `filePath`; every decision has a `sourceUrl`  
+- **No invent** — extraction never invents tech, paths, or alternatives missing from the source  
+- **Config-only providers** — new LLM hosts are a `providers.yaml` change, never a new SDK  
+- **Domain owns policy** — ranking and filters live in `@codeoracle/core-domain`, not in HTTP glue  
+
+---
+
+## Honest limits (read this)
+
+- **Search / explain** improve with a good index and embeddings. Prefer symbol-ish queries when you can (`authorizeForRepo` beats vague prose). Soft NL can still prefer docs over code — we’re tightening that with evals.  
+- **Decision extract** quality follows your **chat** model and how much rationale exists in PR/commit text. Small or weak local models often produce thin or noisy decisions; stronger models (local or cloud) usually do better. Empty `alternatives` is often honest — the source never named an option.  
+- CodeOracle **narrows the haystack**; it does not replace the coding model in your editor.  
+- Prefer **all-local** providers when code must not leave your environment; use cloud chat only when you accept that extract payloads go to that API.
 
 ---
 
@@ -33,39 +116,6 @@ Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md) · Stages 0–5 on `main`
 | **Fresh** | GitHub push → `api` (HMAC) → `incremental_reindex` |
 
 Packages never import apps. Shared shapes live in `@codeoracle/contracts`.
-
----
-
-## Why CodeOracle?
-
-Agents waste tokens re-reading the same trees and digging through old PRs for “why did we…?”. CodeOracle keeps a small, cited memory of **what the code is** and **why it looks that way**.
-
-| Without CodeOracle | With CodeOracle |
-|--------------------|-----------------|
-| Paste half the repo into context | A few ranked chunks + file paths |
-| Git archaeology for every design question | `find_decision` → WHY + source PR/commit URL |
-| Guess which file matters | `search_codebase` / `explain_file` with citations |
-
-It does **not** replace the model. It **narrows the haystack** so the model spends tokens answering, not hunting.
-
-**Rules we do not bend**
-
-- **No citation = bug** — every hit has a `filePath`; every decision has a `sourceUrl`
-- **No invent** — extraction never invents tech, paths, or alternatives missing from the source
-- **Config-only providers** — new LLM hosts are a `providers.yaml` change, never a new SDK
-- **Domain owns policy** — ranking and filters live in `@codeoracle/core-domain`, not in HTTP glue
-
----
-
-## What you get
-
-| Tool | What it does | Needs |
-|------|----------------|-------|
-| `search_codebase` | Hybrid search over indexed chunks | Embeddings |
-| `explain_file` | File chunks + related decisions (no LLM rewrite) | Index |
-| `find_decision` | WHY, alternatives, confidence, source URL | Extract once with a chat model; queries are retrieval only |
-
-**Typical loop:** register a repo → worker indexes → optional decision extract → connect MCP → optional GitHub push webhooks.
 
 ---
 
@@ -120,7 +170,7 @@ Schema source: [`packages/db/src/schema/`](./packages/db/src/schema/).
 ### 1. Install
 
 ```bash
-git clone https://github.com/Jassu78/CodeOracle.git
+git clone git@github.com:Jassu78/CodeOracle.git
 cd CodeOracle
 corepack enable
 pnpm install
@@ -144,7 +194,7 @@ Defaults match Compose (`DATABASE_URL`, `REDIS_URL`, `QDRANT_URL`).
 ollama pull nomic-embed-text
 ```
 
-Search works with embeddings alone. Enable a **chat** row in `providers.yaml` (and its API key) only when you want decision extraction.
+Search works with embeddings alone. Enable a **chat** row in `providers.yaml` (and its API key, if any) only when you want decision extraction. Prefer a capable chat model for extract — tiny models are fine for experiments, weaker for production-quality decisions.
 
 ### 4. Worker + register + index
 
@@ -192,8 +242,8 @@ Cap spend with `EXTRACT_QUEUE_LIMIT` / `--limit N` and `EXTRACT_REPO_DAILY_TOKEN
 | Tool | Example |
 |------|---------|
 | `search_codebase` | `where do we validate JWT` |
-| `explain_file` | `src/auth/middleware.ts` |
-| `find_decision` | `why Redis for sessions` |
+| `explain_file` | `apps/api/src/lib/auth.ts` |
+| `find_decision` | `why hybrid ranking` |
 
 Prefer **symbol names** over vague NL when searching (`verifyGitHubSignature` beats “where do we verify webhooks”).
 
@@ -220,7 +270,7 @@ chat:
     kind: chat
     baseUrl: http://localhost:11434/v1
     apiKeyEnv: null
-    model: qwen2.5-coder:1.5b
+    model: qwen2.5-coder:7b   # use the strongest local chat model you can run for extract
     priority: 1
     enabled: true
 embeddings:
@@ -306,8 +356,9 @@ MCP HTTP always needs a bearer.
 apps/        api · worker · mcp-server · cli
 packages/    contracts · config · db · core-domain · chunker
              gateway · retrieval · extraction · queue · observability
-infra/       compose · docker images · dogfood ops · ci notes
+infra/       compose · docker images · ops helpers · ci notes
 test/        sample-repo · golden eval · e2e
+docs/        intro · specs · demo page
 ```
 
 ---
@@ -320,9 +371,7 @@ test/        sample-repo · golden eval · e2e
 - Do not expose Postgres, Redis, Qdrant, or Ollama to the public internet.
 - Set `API_TOKEN` and webhook secret before exposing the API.
 - Images: [`infra/docker/README.md`](./infra/docker/README.md).
-- Full reindex clears **this repo’s** Qdrant chunk points on a hybrid collection (E8). Legacy→hybrid still recreates the collection once — reindex other repos afterward.
-
-**GitHub Pages / public docs site:** parked on purpose while the repo is **private**. Revisit after a public launch (Q6 / homepage) — not before.
+- Full reindex recreates Qdrant `code_chunks` — fine for a single-repo deployment; plan multi-repo carefully.
 
 ---
 
@@ -330,9 +379,7 @@ test/        sample-repo · golden eval · e2e
 
 PRs need lint, typecheck, unit tests, Compose smoke, integration e2e, and golden eval. See [`infra/ci/README.md`](./infra/ci/README.md) and [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
-**Live index replay (any ready repo):** suite JSON + `codeoracle replay <repoId> --suite test/replay/suites/….json` — see [`test/replay/README.md`](./test/replay/README.md). Complements fixture `pnpm test:eval`; does not replace it. **CI** runs golden eval + replay unit/schema tests; **dogfood** runs live product-repo replay (not GitHub Actions).
-
-**Honest limits:** soft NL search can prefer docs over symbols; decision list quality depends on embeddings + ranking floors; extraction tracks chat-model and PR prose quality. Empty alternatives are often honest (source named no option). Indexing skips lockfiles, ORM meta/migrations, and eval suite JSON by default — full reindex after changing crawler excludes.
+**Live index replay (any ready repo):** suite JSON + `codeoracle replay <repoId> --suite test/replay/suites/….json` — see [`test/replay/README.md`](./test/replay/README.md). Complements fixture `pnpm test:eval`; does not replace it. CI runs golden eval + replay unit/schema tests; live product-index replay is an ops gate (needs a ready index + real embeddings).
 
 ---
 

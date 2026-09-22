@@ -2,8 +2,7 @@
 
 Interactive landing page (“Quiet Archive” visual system).
 
-```bash
-open docs/demo/index.html
-```
+- Local: open `docs/demo/index.html`
+- GitHub Pages: https://jassu78.github.io/CodeOracle/ (root redirects here)
 
-The ask demo citations point at this repo (`apps/api/src/lib/auth.ts`, [PR #8](https://github.com/Jassu78/CodeOracle/pull/8)).
+Citations in the ask demo point at this repo (`apps/api/src/lib/auth.ts`, [PR #8](https://github.com/Jassu78/CodeOracle/pull/8)).
