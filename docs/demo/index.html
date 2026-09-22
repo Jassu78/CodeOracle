@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CodeOracle — Search the code. Remember the why.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* Quiet Archive — memory / citation identity (not neo-brutalist yellow) */
+    :root {
+      --mist: #e8eef4;
+      --mist-2: #f4f7fa;
+      --paper: #fcfdff;
+      --ink: #121820;
+      --ink-soft: #3d4a5c;
+      --muted: #6b7a8d;
+      --line: rgba(18, 24, 32, 0.1);
+      --teal: #0f766e;
+      --teal-bright: #14b8a6;
+      --teal-soft: rgba(20, 184, 166, 0.12);
+      --copper: #c4784a;
+      --shadow: 0 18px 50px rgba(18, 40, 60, 0.08);
+      --shadow-sm: 0 8px 24px rgba(18, 40, 60, 0.06);
+      --display: "Fraunces", Georgia, serif;
+      --sans: "Manrope", system-ui, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--sans);
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 90% 60% at 10% -10%, rgba(20, 184, 166, 0.14), transparent 55%),
+        radial-gradient(ellipse 70% 50% at 100% 20%, rgba(196, 120, 74, 0.08), transparent 50%),
+        linear-gradient(180deg, var(--mist) 0%, var(--mist-2) 40%, #eef2f6 100%);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.35;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
+      mix-blend-mode: soft-light;
+      z-index: 0;
+    }
+    a { color: inherit; }
+    button, input { font: inherit; }
+
+    .wrap {
+      width: min(1100px, calc(100% - 40px));
+      margin: 0 auto;
+      position: relative;
+      z-index: 1;
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 28px 0 8px;
+    }
+    .logo {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      text-decoration: none;
+    }
+    .logo strong {
+      font-family: var(--display);
+      font-weight: 650;
+      font-size: clamp(28px, 3.2vw, 34px);
+      letter-spacing: -0.03em;
+    }
+    .logo span {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--copper);
+    }
+    .nav-cta {
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--paper);
+      background: var(--ink);
+      padding: 11px 16px;
+      border-radius: 10px;
+      transition: transform 0.2s var(--ease), background 0.2s ease;
+    }
+    .nav-cta:hover { background: var(--teal); transform: translateY(-1px); }
+
+    /* Hero — brand first, one composition */
+    .hero {
+      padding: 48px 0 36px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 36px;
+    }
+    .hero-copy {
+      max-width: 720px;
+    }
+    .hero h1 {
+      font-family: var(--display);
+      font-weight: 650;
+      font-size: clamp(44px, 7vw, 72px);
+      letter-spacing: -0.035em;
+      line-height: 1.05;
+      max-width: 14ch;
+      color: var(--ink);
+    }
+    .hero h1 em {
+      font-style: italic;
+      font-weight: 500;
+      color: var(--teal);
+    }
+    .hero .lede {
+      margin-top: 18px;
+      font-size: clamp(16px, 1.8vw, 18px);
+      font-weight: 500;
+      color: var(--ink-soft);
+      max-width: 46ch;
+    }
+
+    /* Instrument panel — ask + tools + answer */
+    .instrument {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .panel {
+      background: rgba(252, 253, 255, 0.86);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .ask-panel { padding: 18px; }
+    .ask-row {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .ask-row input {
+      flex: 1;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      border-radius: 14px;
+      padding: 15px 16px;
+      outline: none;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--ink);
+      min-width: 0;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .ask-row input:focus {
+      border-color: rgba(15, 118, 110, 0.45);
+      box-shadow: 0 0 0 4px var(--teal-soft);
+    }
+    .ask-row button {
+      border: 0;
+      background: var(--teal);
+      color: #fff;
+      border-radius: 14px;
+      padding: 0 22px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.2s var(--ease);
+    }
+    .ask-row button:hover { background: #0d9488; transform: translateY(-1px); }
+    .ask-row button:disabled { opacity: 0.6; cursor: wait; transform: none; }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .chip {
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--ink-soft);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+    .chip:hover, .chip.on {
+      background: var(--teal-soft);
+      border-color: rgba(15, 118, 110, 0.35);
+      color: var(--teal);
+    }
+
+    .stage {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 14px;
+      min-height: 210px;
+    }
+    @media (max-width: 640px) {
+      .stage { grid-template-columns: 1fr; }
+    }
+
+    .trace {
+      position: relative;
+      padding: 8px 4px 8px 14px;
+    }
+    .trace::before {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 16px;
+      bottom: 16px;
+      width: 2px;
+      background: linear-gradient(180deg, var(--teal-bright), transparent);
+      border-radius: 2px;
+      opacity: 0.45;
+    }
+    .trace h3 {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+    .trace-item {
+      position: relative;
+      display: none;
+      padding: 8px 0 14px 12px;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.3s ease, transform 0.35s var(--ease);
+    }
+    .trace-item.show {
+      display: block;
+      opacity: 1;
+      transform: none;
+    }
+    .trace-item::before {
+      content: "";
+      position: absolute;
+      left: -12px;
+      top: 12px;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--paper);
+      border: 2px solid var(--teal);
+    }
+    .trace-item.live::before {
+      background: var(--teal-bright);
+      box-shadow: 0 0 0 4px var(--teal-soft);
+    }
+    .trace-item .tn {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .trace-item .ta {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      color: var(--muted);
+      margin-top: 3px;
+      word-break: break-word;
+    }
+
+    .answer-well {
+      border-radius: 16px;
+      background: linear-gradient(160deg, #f7fbfb 0%, #ffffff 55%);
+      border: 1px solid var(--line);
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .status {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .answer-card {
+      display: none;
+    }
+    .answer-card.show {
+      display: block;
+      animation: rise 0.4s var(--ease);
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+    .answer-card .kind {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--teal);
+      margin-bottom: 8px;
+    }
+    .answer-card p {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--ink);
+      line-height: 1.55;
+    }
+    .answer-card .cite {
+      margin-top: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink);
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: var(--shadow-sm);
+      transition: border-color 0.2s ease, transform 0.2s var(--ease);
+    }
+    .answer-card.climax .cite {
+      border-color: rgba(196, 120, 74, 0.45);
+      background: rgba(196, 120, 74, 0.12);
+      color: #8a4a28;
+      animation: citeIn 0.5s var(--ease);
+    }
+    @keyframes citeIn {
+      0% { transform: scale(0.97); opacity: 0.6; }
+      100% { transform: none; opacity: 1; }
+    }
+    .answer-card .cite:hover { transform: translateY(-1px); }
+
+    /* Side memory atlas */
+    .atlas {
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      background:
+        linear-gradient(165deg, rgba(20, 184, 166, 0.08), transparent 40%),
+        rgba(252, 253, 255, 0.9);
+    }
+    .atlas h2 {
+      font-family: var(--display);
+      font-size: 22px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    .atlas p {
+      font-size: 14px;
+      color: var(--ink-soft);
+      font-weight: 500;
+    }
+    .atlas-list {
+      list-style: none;
+      display: grid;
+      gap: 12px;
+    }
+    @media (max-width: 720px) {
+      .section .atlas { grid-template-columns: 1fr !important; }
+    }
+    .atlas-list li {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px;
+      align-items: start;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--ink-soft);
+    }
+    .atlas-list .dot {
+      width: 28px; height: 28px;
+      border-radius: 9px;
+      background: var(--teal-soft);
+      color: var(--teal);
+      display: grid;
+      place-items: center;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    /* Continuum / flow */
+    .section {
+      padding: 64px 0 24px;
+    }
+    .section-head {
+      max-width: 540px;
+      margin-bottom: 28px;
+    }
+    .section-head h2 {
+      font-family: var(--display);
+      font-size: clamp(28px, 3.8vw, 38px);
+      font-weight: 650;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 10px;
+    }
+    .section-head p {
+      color: var(--ink-soft);
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .continuum {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      position: relative;
+    }
+    @media (max-width: 800px) {
+      .continuum { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 520px) {
+      .continuum { grid-template-columns: 1fr; }
+    }
+    .node {
+      background: rgba(252, 253, 255, 0.75);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      min-height: 130px;
+      opacity: 0.45;
+      transform: translateY(4px);
+      transition: opacity 0.35s ease, transform 0.35s var(--ease), border-color 0.35s ease, box-shadow 0.35s ease, background 0.35s ease;
+    }
+    .node.on {
+      opacity: 1;
+      transform: none;
+      border-color: rgba(15, 118, 110, 0.35);
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: var(--shadow-sm);
+    }
+    .node .n {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--teal);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .node h3 {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .node p {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* Tools ribbon */
+    .ribbon {
+      margin: 48px 0 72px;
+      border-radius: 24px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: var(--ink);
+      color: #dce5ef;
+      box-shadow: var(--shadow);
+    }
+    .ribbon-inner { padding: 36px 32px; }
+    .ribbon h2 {
+      font-family: var(--display);
+      font-size: clamp(26px, 3.4vw, 34px);
+      font-weight: 650;
+      color: #fff;
+      letter-spacing: -0.03em;
+      margin-bottom: 8px;
+    }
+    .ribbon .sub {
+      color: #9aabbc;
+      font-size: 15px;
+      font-weight: 500;
+      max-width: 48ch;
+      margin-bottom: 24px;
+    }
+    .tool-rows { display: grid; gap: 0; }
+    .tool-row {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 16px;
+      padding: 16px 0;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    @media (max-width: 640px) {
+      .tool-row { grid-template-columns: 1fr; }
+    }
+    .tool-row code {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--teal-bright);
+      font-weight: 600;
+    }
+    .tool-row p { font-size: 14.5px; font-weight: 500; color: #b7c5d3; }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 0 0 48px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="#">
+        <strong>CodeOracle</strong>
+        <span>memory</span>
+      </a>
+      <a class="nav-cta" href="https://github.com/Jassu78/CodeOracle" target="_blank" rel="noopener">Open on GitHub</a>
+    </nav>
+
+    <header class="hero">
+      <div class="hero-copy">
+        <h1>Keep the code. Keep the <em>why</em>.</h1>
+        <p class="lede">
+          Self-hosted MCP for coding agents — hybrid search over your repository, plus decisions mined from PRs. Ask once; get a cited answer.
+        </p>
+      </div>
+
+      <div class="instrument">
+        <div class="panel ask-panel" id="try">
+          <div class="ask-row">
+            <input id="q" type="text" value="Where do we authorize access to a specific repository?" aria-label="Ask about the codebase" />
+            <button type="button" id="askBtn">Ask</button>
+          </div>
+          <div class="chips">
+            <button type="button" class="chip on" data-q="Where do we authorize access to a specific repository?" data-kind="where">Where is authorization?</button>
+            <button type="button" class="chip" data-q="Why hybrid ranking instead of vectors alone?" data-kind="why">Why hybrid ranking?</button>
+            <button type="button" class="chip" data-q="What does apps/api/src/lib/auth.ts do?" data-kind="file">Explain auth.ts</button>
+          </div>
+
+          <div class="stage">
+            <aside class="trace">
+              <h3>Signal</h3>
+              <div class="trace-item" id="tr1">
+                <div class="tn">search_codebase</div>
+                <div class="ta" id="tr1a"></div>
+              </div>
+              <div class="trace-item" id="tr2">
+                <div class="tn">find_decision</div>
+                <div class="ta" id="tr2a"></div>
+              </div>
+              <div class="trace-item" id="tr3">
+                <div class="tn">explain_file</div>
+                <div class="ta" id="tr3a"></div>
+              </div>
+            </aside>
+            <div class="answer-well">
+              <div class="status" id="status">Listening…</div>
+              <div class="answer-card" id="answer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="section" style="padding-top: 8px">
+      <div class="panel atlas" style="padding: 28px 32px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 28px; align-items: center;">
+        <div>
+          <h2 style="font-family: var(--display); font-size: 28px; font-weight: 650; letter-spacing: -0.02em; margin-bottom: 10px;">What stays after the session ends</h2>
+          <p style="font-size: 15px; color: var(--ink-soft); font-weight: 500; max-width: 42ch;">Agents forget PR debates. CodeOracle keeps a durable archive — so the next ask doesn’t start from zero.</p>
+        </div>
+        <ul class="atlas-list">
+          <li><span class="dot">01</span><span>Indexed chunks with file paths</span></li>
+          <li><span class="dot">02</span><span>Decisions with mandatory source URLs</span></li>
+          <li><span class="dot">03</span><span>Team freshness via webhooks</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="how">
+      <div class="section-head">
+        <h2>From question to citation</h2>
+        <p>These nodes light as the ask above runs — the same path an MCP client takes.</p>
+      </div>
+      <div class="continuum">
+        <div class="node" data-step="1">
+          <div class="n">01 · ask</div>
+          <h3>Your agent</h3>
+          <p>Any MCP client. One shared memory for the team.</p>
+        </div>
+        <div class="node" data-step="2">
+          <div class="n">02 · route</div>
+          <h3>Tool chosen</h3>
+          <p>Search, decide, or explain — for this question.</p>
+        </div>
+        <div class="node" data-step="3">
+          <div class="n">03 · retrieve</div>
+          <h3>Index + archive</h3>
+          <p>Hybrid chunks and mined PR decisions.</p>
+        </div>
+        <div class="node" data-step="4">
+          <div class="n">04 · prove</div>
+          <h3>Cited answer</h3>
+          <p>Path or PR URL required. No citation = bug.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="ribbon">
+      <div class="ribbon-inner">
+        <h2>Three tools. One contract.</h2>
+        <p class="sub">It doesn’t replace the model — it narrows the haystack so tokens go to answering, not hunting.</p>
+        <div class="tool-rows">
+          <div class="tool-row">
+            <code>search_codebase</code>
+            <p>Hybrid retrieval over indexed code — ranked chunks with file paths.</p>
+          </div>
+          <div class="tool-row">
+            <code>find_decision</code>
+            <p>WHY from mined PRs: summary, alternatives, confidence, mandatory source URL.</p>
+          </div>
+          <div class="tool-row">
+            <code>explain_file</code>
+            <p>What this path contains, plus related decisions. Deterministic — no LLM rewrite.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>Self-hosted · any MCP client · citations required</span>
+      <span>CodeOracle</span>
+    </footer>
+  </div>
+
+  <script>
+    const answers = {
+      where: {
+        tool: { id: "tr1", arg: 'query: "authorize access to a specific repository"' },
+        status: "Routing → search_codebase",
+        html: `
+          <div class="kind">Where · cited</div>
+          <p><strong>authorizeForRepo</strong> in <code style="font-family:var(--mono)">apps/api/src/lib/auth.ts</code> — open-dev bypass, then principal scoped to the repository.</p>
+          <a class="cite" href="https://github.com/Jassu78/CodeOracle/blob/main/apps/api/src/lib/auth.ts" target="_blank" rel="noopener">↗ apps/api/src/lib/auth.ts</a>
+        `,
+      },
+      why: {
+        tool: { id: "tr2", arg: 'topic: "hybrid retrieval ranking"' },
+        status: "Routing → find_decision",
+        html: `
+          <div class="kind">Why · cited</div>
+          <p><strong>Keep hybrid retrieval with a score floor.</strong> Vectors alone missed exact symbols; keyword + dense fused better. Alternative considered: stick to core-domain only.</p>
+          <a class="cite" href="https://github.com/Jassu78/CodeOracle/pull/8" target="_blank" rel="noopener">↗ CodeOracle/pull/8</a>
+        `,
+      },
+      file: {
+        tool: { id: "tr3", arg: "path: apps/api/src/lib/auth.ts" },
+        status: "Routing → explain_file",
+        html: `
+          <div class="kind">File · cited</div>
+          <p>Chunks cover bearer tokens, <strong>resolveAuth</strong>, <strong>authorizeForRepo</strong>, and admin checks — the API auth surface for scoped repo access.</p>
+          <a class="cite" href="https://github.com/Jassu78/CodeOracle/blob/main/apps/api/src/lib/auth.ts" target="_blank" rel="noopener">↗ apps/api/src/lib/auth.ts</a>
+        `,
+      },
+    };
+
+    const q = document.getElementById("q");
+    const askBtn = document.getElementById("askBtn");
+    const status = document.getElementById("status");
+    const answer = document.getElementById("answer");
+    const chips = [...document.querySelectorAll(".chip")];
+    const nodes = [...document.querySelectorAll(".node")];
+
+    let kind = "where";
+    let busy = false;
+
+    function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+    function setSteps(n) {
+      nodes.forEach((el) => {
+        el.classList.toggle("on", Number(el.dataset.step) <= n);
+      });
+    }
+
+    function clearTrace() {
+      ["tr1", "tr2", "tr3"].forEach((id) => {
+        const el = document.getElementById(id);
+        el.classList.remove("show", "live");
+      });
+    }
+
+    chips.forEach((chip) => {
+      chip.addEventListener("click", () => {
+        chips.forEach((c) => c.classList.remove("on"));
+        chip.classList.add("on");
+        q.value = chip.dataset.q;
+        kind = chip.dataset.kind;
+        runAsk();
+      });
+    });
+
+    async function runAsk() {
+      if (busy) return;
+      busy = true;
+      askBtn.disabled = true;
+      clearTrace();
+      answer.classList.remove("show", "climax");
+      answer.innerHTML = "";
+      setSteps(1);
+
+      const pack = answers[kind] || answers.where;
+      status.textContent = pack.status;
+      await wait(260);
+      setSteps(2);
+
+      const el = document.getElementById(pack.tool.id);
+      el.querySelector(".ta").textContent = pack.tool.arg;
+      el.classList.add("show", "live");
+      await wait(480);
+      setSteps(3);
+      await wait(320);
+      setSteps(4);
+
+      status.textContent = "Cited answer ready";
+      answer.innerHTML = pack.html;
+      answer.classList.add("show", "climax");
+
+      busy = false;
+      askBtn.disabled = false;
+    }
+
+    askBtn.addEventListener("click", runAsk);
+    q.addEventListener("keydown", (e) => { if (e.key === "Enter") runAsk(); });
+    q.addEventListener("input", () => {
+      const v = q.value.toLowerCase();
+      if (v.includes("why")) kind = "why";
+      else if (v.includes("explain") || v.includes("auth.ts")) kind = "file";
+      else kind = "where";
+      chips.forEach((c) => c.classList.toggle("on", c.dataset.kind === kind));
+    });
+
+    runAsk();
+  </script>
+</body>
+</html>
